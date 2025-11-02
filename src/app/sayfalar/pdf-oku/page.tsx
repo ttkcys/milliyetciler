@@ -3,6 +3,7 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { Route } from "next";
 import PDFFlipBook from "../../../scripts/PDFFlipBook";
 
 function normalizePublicPath(p?: string | null) {
@@ -72,7 +73,7 @@ export default function PdfOkuPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id) router.replace("/");
+    if (!id) router.replace("/" as Route); // ← cast
   }, [id, router]);
 
   if (err) {
