@@ -1,9 +1,11 @@
+// src/app/api/dergis/[id]/route.ts
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type RouteCtx = { params: Record<string, string | string[]> };
 
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -13,15 +15,19 @@ function toNullable(obj: Record<string, any>) {
   return out;
 }
 
+// ---- helpers ----
+function getIdFromCtx(ctx: RouteCtx): number | null {
+  const raw = ctx.params?.id;
+  const idStr = Array.isArray(raw) ? raw[0] : raw;
+  const num = Number(idStr);
+  return Number.isFinite(num) ? num : null;
+}
+
 /** GET /api/dergis/:id */
-export async function GET(
-  _request: NextRequest,
-  context: { params: { id: string } }
-) {
+export async function GET(_request: Request, context: RouteCtx) {
   try {
-    const { id } = context.params;
-    const num = Number(id);
-    if (isNaN(num)) {
+    const num = getIdFromCtx(context);
+    if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
 
@@ -36,7 +42,9 @@ export async function GET(
     );
 
     const row = (rows as any[])[0];
-    if (!row) return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
+    if (!row) {
+      return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
+    }
 
     return NextResponse.json(row);
   } catch (err) {
@@ -46,14 +54,12 @@ export async function GET(
 }
 
 /** PUT /api/dergis/:id */
-export async function PUT(
-  request: NextRequest,
-  context: { params: { id: string } }
-) {
+export async function PUT(request: Request, context: RouteCtx) {
   try {
-    const { id } = context.params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const {
@@ -88,7 +94,7 @@ export async function PUT(
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
     }
-    return NextResponse.json({ id, message: "Dergi güncellendi" });
+    return NextResponse.json({ id: num, message: "Dergi güncellendi" });
   } catch (err) {
     console.error("PUT error:", err);
     return NextResponse.json({ message: "Sunucu hatası" }, { status: 500 });
@@ -96,14 +102,12 @@ export async function PUT(
 }
 
 /** PATCH /api/dergis/:id */
-export async function PATCH(
-  request: NextRequest,
-  context: { params: { id: string } }
-) {
+export async function PATCH(request: Request, context: RouteCtx) {
   try {
-    const { id } = context.params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const body = toNullable(await request.json().catch(() => ({})));
 
@@ -130,7 +134,7 @@ export async function PATCH(
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
     }
-    return NextResponse.json({ id, message: "Dergi güncellendi" });
+    return NextResponse.json({ id: num, message: "Dergi güncellendi" });
   } catch (err) {
     console.error("PATCH error:", err);
     return NextResponse.json({ message: "Sunucu hatası" }, { status: 500 });
@@ -138,14 +142,12 @@ export async function PATCH(
 }
 
 /** DELETE /api/dergis/:id */
-export async function DELETE(
-  _request: NextRequest,
-  context: { params: { id: string } }
-) {
+export async function DELETE(_request: Request, context: RouteCtx) {
   try {
-    const { id } = context.params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const [result] = await pool.query("DELETE FROM dergis WHERE id = ?", [num]);
     if ((result as any).affectedRows === 0) {

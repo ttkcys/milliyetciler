@@ -1,8 +1,11 @@
+// src/app/api/yazars/[id]/route.ts
 import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type RouteCtx = { params: Record<string, string | string[]> };
 
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -21,15 +24,19 @@ function normalizeImagePathForDB(v?: string | null) {
   return s;
 }
 
+/** ctx.params.id → number güvenli çözüm */
+function getIdFromCtx(ctx: RouteCtx): number | null {
+  const raw = ctx.params?.id;
+  const idStr = Array.isArray(raw) ? raw[0] : raw;
+  const num = Number(idStr);
+  return Number.isFinite(num) ? num : null;
+}
+
 /** GET /api/yazars/:id */
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) {
+    const num = getIdFromCtx(context);
+    if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
 
@@ -50,14 +57,10 @@ export async function GET(
 }
 
 /** PUT /api/yazars/:id */
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const body = await request.json().catch(() => ({}));
     let { image } = body || {};
@@ -88,14 +91,10 @@ export async function PUT(
 }
 
 /** PATCH /api/yazars/:id */
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const body = toNullable(await request.json().catch(() => ({})));
 
@@ -126,14 +125,10 @@ export async function PATCH(
 }
 
 /** DELETE /api/yazars/:id */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const [result] = await pool.query("DELETE FROM yazars WHERE id = ?", [num]);
     if ((result as any).affectedRows === 0) {

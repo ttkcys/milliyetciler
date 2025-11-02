@@ -1,8 +1,11 @@
+// src/app/api/sayis/[id]/route.ts
 import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type RouteCtx = { params: Record<string, string | string[]> };
 
 /** "" veya undefined → NULL */
 function toNullable(obj: Record<string, any>) {
@@ -22,15 +25,19 @@ function normalizePathForDB(v?: string | null) {
   return s;
 }
 
+/** ctx.params.id → number güvenli çözüm */
+function getIdFromCtx(ctx: RouteCtx): number | null {
+  const raw = ctx.params?.id;
+  const idStr = Array.isArray(raw) ? raw[0] : raw;
+  const num = Number(idStr);
+  return Number.isFinite(num) ? num : null;
+}
+
 /** GET /api/sayis/:id */
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) {
+    const num = getIdFromCtx(context);
+    if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
 
@@ -55,14 +62,12 @@ export async function GET(
 }
 
 /** PUT /api/sayis/:id */
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const { dergi_id, sayi_num, ay, yil, image, pdf, toplam_sayfa, toplam_yazi } = body || {};
@@ -105,14 +110,12 @@ export async function PUT(
 }
 
 /** PATCH /api/sayis/:id */
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const raw = await request.json().catch(() => ({}));
     const body = toNullable({
@@ -123,7 +126,7 @@ export async function PATCH(
 
     const allowed = [
       "dergi_id", "sayi_num", "ay", "yil",
-      "image", "pdf", "toplam_sayfa", "toplam_yazi"
+      "image", "pdf", "toplam_sayfa", "toplam_yazi",
     ] as const;
 
     const fields = Object.keys(body).filter((k) => allowed.includes(k as any));
@@ -151,14 +154,12 @@ export async function PATCH(
 }
 
 /** DELETE /api/sayis/:id */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_request: Request, context: RouteCtx) {
   try {
-    const { id } = params;
-    const num = Number(id);
-    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const num = getIdFromCtx(context);
+    if (num === null) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const [result] = await pool.query("DELETE FROM sayis WHERE id = ?", [num]);
     if ((result as any).affectedRows === 0) {

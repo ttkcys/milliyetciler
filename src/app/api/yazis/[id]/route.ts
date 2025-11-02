@@ -1,8 +1,11 @@
+// src/app/api/yazis/[id]/route.ts
 import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type RouteCtx = { params: Record<string, string | string[]> };
 
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -12,14 +15,19 @@ function toNullable(obj: Record<string, any>) {
   return out;
 }
 
+/** ctx.params.id → number güvenli çözüm */
+function getIdFromCtx(ctx: RouteCtx): number | null {
+  const raw = ctx.params?.id;
+  const idStr = Array.isArray(raw) ? raw[0] : raw;
+  const num = Number(idStr);
+  return Number.isFinite(num) ? num : null;
+}
+
 /** GET /api/yazis/:id — AuthorWork ile hizalı kolonlar */
-export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_request: Request, context: RouteCtx) {
   try {
-    const id = Number(params.id);
-    if (isNaN(id)) {
+    const id = getIdFromCtx(context);
+    if (id === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
 
@@ -58,13 +66,10 @@ export async function GET(
 }
 
 /** PUT /api/yazis/:id — tam güncelle */
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: Request, context: RouteCtx) {
   try {
-    const id = Number(params.id);
-    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const id = getIdFromCtx(context);
+    if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const body = toNullable(await request.json().catch(() => ({})));
 
@@ -98,13 +103,10 @@ export async function PUT(
 }
 
 /** PATCH /api/yazis/:id — kısmi güncelle */
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: Request, context: RouteCtx) {
   try {
-    const id = Number(params.id);
-    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const id = getIdFromCtx(context);
+    if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const body = toNullable(await request.json().catch(() => ({})));
 
@@ -113,6 +115,13 @@ export async function PATCH(
     if (fields.length === 0) {
       return NextResponse.json({ message: "Güncellenecek alan yok" }, { status: 400 });
     }
+
+    // Tür düzeltmeleri (opsiyonel ama güvenli)
+    if (fields.includes("sayi_id" as any))  (body as any).sayi_id   = Number((body as any).sayi_id);
+    if (fields.includes("yazar_id" as any)) (body as any).yazar_id  = Number((body as any).yazar_id);
+    if (fields.includes("sayfa_num" as any)) (body as any).sayfa_num = Number((body as any).sayfa_num);
+    if (fields.includes("baslik" as any) && (body as any).baslik != null)
+      (body as any).baslik = String((body as any).baslik);
 
     const sets = fields.map((f) => `${f} = ?`).join(", ") + ", updated_at = NOW()";
     const values = fields.map((f) => (body as any)[f]);
@@ -130,13 +139,10 @@ export async function PATCH(
 }
 
 /** DELETE /api/yazis/:id */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_request: Request, context: RouteCtx) {
   try {
-    const id = Number(params.id);
-    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    const id = getIdFromCtx(context);
+    if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const [result] = await pool.query("DELETE FROM yazis WHERE id = ?", [id]);
     if ((result as any).affectedRows === 0) {
