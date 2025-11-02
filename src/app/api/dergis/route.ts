@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextNextRequest, NextResponse } from "next/server";
 import pool from "../../../db/connect";
 
 export const runtime = "nodejs";

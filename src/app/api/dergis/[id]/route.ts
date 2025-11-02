@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
@@ -14,11 +15,11 @@ function toNullable(obj: Record<string, any>) {
 
 /** GET /api/dergis/:id */
 export async function GET(
-  _request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const num = Number(id);
     if (isNaN(num)) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
@@ -46,11 +47,11 @@ export async function GET(
 
 /** PUT /api/dergis/:id */
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const num = Number(id);
     if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
@@ -96,11 +97,11 @@ export async function PUT(
 
 /** PATCH /api/dergis/:id */
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const num = Number(id);
     if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
@@ -138,11 +139,11 @@ export async function PATCH(
 
 /** DELETE /api/dergis/:id */
 export async function DELETE(
-  _request: Request,
-  { params }: { params: { id: string } }
+  _request: NextRequest,
+  context: { params: { id: string } }
 ) {
   try {
-    const { id } = params;
+    const { id } = context.params;
     const num = Number(id);
     if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
