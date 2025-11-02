@@ -5,8 +5,6 @@ import pool from "../../../../db/connect";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type RouteCtx = { params: Record<string, string | string[]> };
-
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -15,18 +13,21 @@ function toNullable(obj: Record<string, any>) {
   return out;
 }
 
-// ---- helpers ----
-function getIdFromCtx(ctx: RouteCtx): number | null {
-  const raw = ctx.params?.id;
+// ctx.params.id → number güvenli çözüm
+function getIdFromParams(params: Record<string, string | string[]>): number | null {
+  const raw = params?.id;
   const idStr = Array.isArray(raw) ? raw[0] : raw;
   const num = Number(idStr);
   return Number.isFinite(num) ? num : null;
 }
 
 /** GET /api/dergis/:id */
-export async function GET(_request: Request, context: RouteCtx) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Record<string, string | string[]> }
+) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getIdFromParams(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -54,9 +55,12 @@ export async function GET(_request: Request, context: RouteCtx) {
 }
 
 /** PUT /api/dergis/:id */
-export async function PUT(request: Request, context: RouteCtx) {
+export async function PUT(
+  request: Request,
+  { params }: { params: Record<string, string | string[]> }
+) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getIdFromParams(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -102,9 +106,12 @@ export async function PUT(request: Request, context: RouteCtx) {
 }
 
 /** PATCH /api/dergis/:id */
-export async function PATCH(request: Request, context: RouteCtx) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: Record<string, string | string[]> }
+) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getIdFromParams(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -142,9 +149,12 @@ export async function PATCH(request: Request, context: RouteCtx) {
 }
 
 /** DELETE /api/dergis/:id */
-export async function DELETE(_request: Request, context: RouteCtx) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Record<string, string | string[]> }
+) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getIdFromParams(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
