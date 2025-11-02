@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
@@ -13,10 +13,17 @@ function toNullable(obj: Record<string, any>) {
 }
 
 /** GET /api/dergis/:id */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
+
     const [rows] = await pool.query(
       `SELECT
          id, isim, alt_baslik, slogan, aciklama,
@@ -26,8 +33,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
        WHERE id = ? LIMIT 1`,
       [num]
     );
+
     const row = (rows as any[])[0];
     if (!row) return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
+
     return NextResponse.json(row);
   } catch (err) {
     console.error("GET /api/dergis/:id error:", err);
@@ -35,12 +44,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-/** PUT /api/dergis/:id  (tam güncelle) */
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+/** PUT /api/dergis/:id */
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
-    const body = await req.json().catch(() => ({}));
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const body = await request.json().catch(() => ({}));
     const {
       isim, alt_baslik, slogan, aciklama,
       imtiyaz, yazi_mudur, cikis, bitis, basim_yeri,
@@ -58,21 +72,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     });
 
     const [result] = await pool.query(
-      `UPDATE dergis
-          SET isim = ?,
-              alt_baslik = ?,
-              slogan = ?,
-              aciklama = ?,
-              imtiyaz = ?,
-              yazi_mudur = ?,
-              cikis = ?,
-              bitis = ?,
-              basim_yeri = ?,
-              toplam_sayi = ?,
-              eksikler = ?,
-              telif = ?,
-              updated_at = NOW()
-        WHERE id = ?`,
+      `UPDATE dergis SET
+         isim = ?, alt_baslik = ?, slogan = ?, aciklama = ?,
+         imtiyaz = ?, yazi_mudur = ?, cikis = ?, bitis = ?, basim_yeri = ?,
+         toplam_sayi = ?, eksikler = ?, telif = ?, updated_at = NOW()
+       WHERE id = ?`,
       [
         data.isim, data.alt_baslik, data.slogan, data.aciklama,
         data.imtiyaz, data.yazi_mudur, data.cikis, data.bitis, data.basim_yeri,
@@ -85,17 +89,22 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
     return NextResponse.json({ id, message: "Dergi güncellendi" });
   } catch (err) {
-    console.error("PUT /api/dergis/:id error:", err);
+    console.error("PUT error:", err);
     return NextResponse.json({ message: "Sunucu hatası" }, { status: 500 });
   }
 }
 
-/** PATCH /api/dergis/:id  (kısmi güncelle) */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+/** PATCH /api/dergis/:id */
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
-    const body = toNullable(await req.json().catch(() => ({})));
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const body = toNullable(await request.json().catch(() => ({})));
 
     const allowed = [
       "isim", "alt_baslik", "slogan", "aciklama",
@@ -109,32 +118,41 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const sets = fields.map((f) => `${f} = ?`).join(", ") + ", updated_at = NOW()";
-    const paramsArr = fields.map((f) => (body as any)[f]);
-    paramsArr.push(num);
+    const values = fields.map((f) => (body as any)[f]);
+    values.push(num);
 
-    const [result] = await pool.query(`UPDATE dergis SET ${sets} WHERE id = ?`, paramsArr);
+    const [result] = await pool.query(
+      `UPDATE dergis SET ${sets} WHERE id = ?`,
+      values
+    );
+
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
     }
     return NextResponse.json({ id, message: "Dergi güncellendi" });
   } catch (err) {
-    console.error("PATCH /api/dergis/:id error:", err);
+    console.error("PATCH error:", err);
     return NextResponse.json({ message: "Sunucu hatası" }, { status: 500 });
   }
 }
 
 /** DELETE /api/dergis/:id */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
     const [result] = await pool.query("DELETE FROM dergis WHERE id = ?", [num]);
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Dergi bulunamadı" }, { status: 404 });
     }
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    console.error("DELETE /api/dergis/:id error:", err);
+    console.error("DELETE error:", err);
     return NextResponse.json({ message: "Sunucu hatası" }, { status: 500 });
   }
 }

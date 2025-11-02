@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
@@ -13,9 +13,16 @@ function toNullable(obj: Record<string, any>) {
 }
 
 /** GET /api/yazis/:id — AuthorWork ile hizalı kolonlar */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
+
     const [rows] = await pool.query(
       `
       SELECT
@@ -39,8 +46,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       `,
       [id]
     );
+
     const row = (rows as any[])[0];
     if (!row) return NextResponse.json({ message: "Yazı bulunamadı" }, { status: 404 });
+
     return NextResponse.json(row);
   } catch (err) {
     console.error("GET /api/yazis/:id error:", err);
@@ -49,10 +58,15 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 /** PUT /api/yazis/:id — tam güncelle */
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
-    const body = toNullable(await req.json().catch(() => ({})));
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const body = toNullable(await request.json().catch(() => ({})));
 
     const sayi_id   = Number(body.sayi_id);
     const yazar_id  = Number(body.yazar_id);
@@ -67,13 +81,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     const [result] = await pool.query(
-      `UPDATE yazis
-          SET sayi_id = ?,
-              yazar_id = ?,
-              baslik = ?,
-              sayfa_num = ?,
-              updated_at = NOW()
-        WHERE id = ?`,
+      `UPDATE yazis SET
+         sayi_id = ?, yazar_id = ?, baslik = ?, sayfa_num = ?, updated_at = NOW()
+       WHERE id = ?`,
       [sayi_id, yazar_id, baslik, sayfa_num, id]
     );
 
@@ -88,10 +98,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 /** PATCH /api/yazis/:id — kısmi güncelle */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
-    const body = toNullable(await req.json().catch(() => ({})));
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const body = toNullable(await request.json().catch(() => ({})));
 
     const allowed = ["sayi_id", "yazar_id", "baslik", "sayfa_num"] as const;
     const fields = Object.keys(body).filter((k) => allowed.includes(k as any));
@@ -100,10 +115,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const sets = fields.map((f) => `${f} = ?`).join(", ") + ", updated_at = NOW()";
-    const paramsArr = fields.map((f) => (body as any)[f]);
-    paramsArr.push(id);
+    const values = fields.map((f) => (body as any)[f]);
+    values.push(id);
 
-    const [result] = await pool.query(`UPDATE yazis SET ${sets} WHERE id = ?`, paramsArr);
+    const [result] = await pool.query(`UPDATE yazis SET ${sets} WHERE id = ?`, values);
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Yazı bulunamadı" }, { status: 404 });
     }
@@ -115,9 +130,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 /** DELETE /api/yazis/:id */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
     const [result] = await pool.query("DELETE FROM yazis WHERE id = ?", [id]);
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Yazı bulunamadı" }, { status: 404 });

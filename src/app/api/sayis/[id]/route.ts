@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
@@ -12,19 +12,27 @@ function toNullable(obj: Record<string, any>) {
   }
   return out;
 }
+
+/** URL yolunu DB için temizle */
 function normalizePathForDB(v?: string | null) {
   if (!v) return null;
   let s = String(v).trim();
-  s = s.replace(/^https?:\/\/[^/]+\/+/, "");
-  s = s.replace(/^\/+/, "");
+  s = s.replace(/^https?:\/\/[^/]+\/+/, ""); // domain sil
+  s = s.replace(/^\/+/, "");                 // baştaki / sil
   return s;
 }
 
 /** GET /api/sayis/:id */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
 
     const [rows] = await pool.query(
       `SELECT
@@ -38,6 +46,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
     const row = (rows as any[])[0];
     if (!row) return NextResponse.json({ message: "Sayı bulunamadı" }, { status: 404 });
+
     return NextResponse.json(row);
   } catch (err) {
     console.error("GET /api/sayis/:id error:", err);
@@ -46,12 +55,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 /** PUT /api/sayis/:id */
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
     const { dergi_id, sayi_num, ay, yil, image, pdf, toplam_sayfa, toplam_yazi } = body || {};
 
     if (!dergi_id || !sayi_num) {
@@ -70,17 +83,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     });
 
     const [result] = await pool.query(
-      `UPDATE sayis
-          SET dergi_id = ?,
-              sayi_num = ?,
-              ay = ?,
-              yil = ?,
-              image = ?,
-              pdf = ?,
-              toplam_sayfa = ?,
-              toplam_yazi = ?,
-              updated_at = NOW()
-        WHERE id = ?`,
+      `UPDATE sayis SET
+         dergi_id = ?, sayi_num = ?, ay = ?, yil = ?,
+         image = ?, pdf = ?, toplam_sayfa = ?, toplam_yazi = ?,
+         updated_at = NOW()
+       WHERE id = ?`,
       [
         data.dergi_id, data.sayi_num, data.ay, data.yil,
         data.image, data.pdf, data.toplam_sayfa, data.toplam_yazi, num
@@ -98,12 +105,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 /** PATCH /api/sayis/:id */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
-    const raw = await req.json().catch(() => ({}));
+    const raw = await request.json().catch(() => ({}));
     const body = toNullable({
       ...raw,
       image: normalizePathForDB(raw?.image),
@@ -111,8 +122,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
 
     const allowed = [
-      "dergi_id","sayi_num","ay","yil",
-      "image","pdf","toplam_sayfa","toplam_yazi"
+      "dergi_id", "sayi_num", "ay", "yil",
+      "image", "pdf", "toplam_sayfa", "toplam_yazi"
     ] as const;
 
     const fields = Object.keys(body).filter((k) => allowed.includes(k as any));
@@ -121,10 +132,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const sets = fields.map((f) => `${f} = ?`).join(", ") + ", updated_at = NOW()";
-    const paramsArr = fields.map((f) => (body as any)[f]);
-    paramsArr.push(num);
+    const values = fields.map((f) => (body as any)[f]);
+    values.push(num);
 
-    const [result] = await pool.query(`UPDATE sayis SET ${sets} WHERE id = ?`, paramsArr);
+    const [result] = await pool.query(
+      `UPDATE sayis SET ${sets} WHERE id = ?`,
+      values
+    );
 
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Sayı bulunamadı" }, { status: 404 });
@@ -137,10 +151,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 /** DELETE /api/sayis/:id */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    const { id } = params; // ❗ await YOK
+    const { id } = params;
     const num = Number(id);
+    if (isNaN(num)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const [result] = await pool.query("DELETE FROM sayis WHERE id = ?", [num]);
     if ((result as any).affectedRows === 0) {

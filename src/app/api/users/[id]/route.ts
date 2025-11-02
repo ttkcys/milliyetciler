@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import pool from "../../../../db/connect";
 
 export const runtime = "nodejs";
@@ -39,9 +39,16 @@ function sanitizeUserRow(row: any) {
 }
 
 /** GET /api/users/:id */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+    }
+
     const [rows] = await pool.query(
       `SELECT
          \`id\`, \`name\`, \`email\`,
@@ -53,8 +60,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
        WHERE \`id\` = ? LIMIT 1`,
       [id]
     );
+
     const row = (rows as any[])[0];
     if (!row) return NextResponse.json({ message: "Kullanıcı bulunamadı" }, { status: 404 });
+
     return NextResponse.json(sanitizeUserRow(row));
   } catch (err) {
     console.error("GET /api/users/:id error:", err);
@@ -62,11 +71,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-/** PUT /api/users/:id  (tam güncelle) */
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+/** PUT /api/users/:id */
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
-    const bodyRaw = await req.json().catch(() => ({}));
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const bodyRaw = await request.json().catch(() => ({}));
     const body = toNullable(bodyRaw);
 
     const {
@@ -122,11 +136,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-/** PATCH /api/users/:id  (kısmi güncelle) */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+/** PATCH /api/users/:id */
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
-    const body = toNullable(await req.json().catch(() => ({})));
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
+    const body = toNullable(await request.json().catch(() => ({})));
 
     const allowed = [
       "name","email","password","level","isCan",
@@ -145,10 +164,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
 
     const sets = fields.map((f) => `\`${f}\` = ?`).join(", ") + ", \`updated_at\` = NOW()";
-    const paramsArr = fields.map((f) => (body as any)[f]);
-    paramsArr.push(id);
+    const values = fields.map((f) => (body as any)[f]);
+    values.push(id);
 
-    const [result] = await pool.query(`UPDATE \`users\` SET ${sets} WHERE \`id\` = ?`, paramsArr);
+    const [result] = await pool.query(`UPDATE \`users\` SET ${sets} WHERE \`id\` = ?`, values);
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Kullanıcı bulunamadı" }, { status: 404 });
     }
@@ -163,9 +182,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 /** DELETE /api/users/:id */
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = Number(params.id);
+    if (isNaN(id)) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
+
     const [result] = await pool.query("DELETE FROM `users` WHERE `id` = ?", [id]);
     if ((result as any).affectedRows === 0) {
       return NextResponse.json({ message: "Kullanıcı bulunamadı" }, { status: 404 });
