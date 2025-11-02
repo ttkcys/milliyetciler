@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { BookOpen, FileText, List, ChevronLeft } from "lucide-react";
 
-/* ------------ Tipler ------------ */
+/* ---- Tipler ---- */
 type Sayi = {
   id: number;
   dergi_id: number;
@@ -44,7 +44,7 @@ function pdfFromRule(dergiIsim: string, sayiNo: number) {
   return `/pdf/${enc}/${enc}_${sayiNo}_compressed.pdf`;
 }
 
-/* ------------ Yardımcılar ------------ */
+/* ---- Yardımcılar ---- */
 const placeholderCover = () => "/logo/logo_color.svg";
 
 function normalizePublicPath(p?: string | null) {
@@ -87,8 +87,8 @@ function issueCover(dergiIsim: string | undefined, sayi: Sayi) {
   return placeholderCover();
 }
 
-/* ------------ Sayfa ------------ */
-export default function SayiDetayPage() {
+/* ---- CLIENT WRAPPER (default export) ---- */
+export default function SearchParamsSayiWrapper() {
   const sp = useSearchParams();
   const idParam = sp.get("id");
   const sayiId = idParam ? Number(idParam) : NaN;
@@ -119,7 +119,7 @@ export default function SayiDetayPage() {
         const rD = await fetch(`/api/dergis/${s.dergi_id}`, { cache: "no-store" });
         if (rD.ok) setDergi((await rD.json()) as Dergi);
 
-        // 3) yazılar — API artık yazar_id & yazar_isim döndürüyor
+        // 3) yazılar
         const rY = await fetch(`/api/yazis?sayi_id=${sayiId}&limit=1000`, { cache: "no-store" });
         let rows: YaziApiRow[] = [];
         if (rY.ok) {
@@ -165,18 +165,6 @@ export default function SayiDetayPage() {
   }, [sayi]);
 
   const pdfHref = useMemo(() => normalizePublicPath(sayi?.pdf || undefined) || undefined, [sayi]);
-  const pdfLink = useMemo(() => {
-    if (!sayi || !dergi) return "";
-    const no = extractIssueNo(sayi.sayi_num);
-    const fallback = pdfFromRule(dergi.isim, no);
-    const chosen = pdfHref || fallback;
-    return (
-      `/sayfalar/pdf-oku?id=${sayi.id}` +
-      `&pdf=${encodeURIComponent(chosen)}` +
-      `&dergi=${encodeURIComponent(dergi.isim)}` +
-      `&no=${no}`
-    );
-  }, [sayi, dergi, pdfHref]);
 
   if (!idParam || Number.isNaN(sayiId)) {
     return (
@@ -269,7 +257,6 @@ export default function SayiDetayPage() {
         {/* Sağ panel: Kapak + Butonlar */}
         <div className="md:col-span-1">
           <div className="overflow-hidden rounded-2xl border border-[#333] bg-[#0f0f0f]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={kapak}
               alt={baslik}
