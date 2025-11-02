@@ -13,8 +13,7 @@ function toNullable(obj: Record<string, any>) {
   return out;
 }
 
-// ctx.params.id → number güvenli çözüm
-function getIdFromParams(params: Record<string, string | string[]>): number | null {
+function getId(params: any): number | null {
   const raw = params?.id;
   const idStr = Array.isArray(raw) ? raw[0] : raw;
   const num = Number(idStr);
@@ -22,12 +21,9 @@ function getIdFromParams(params: Record<string, string | string[]>): number | nu
 }
 
 /** GET /api/dergis/:id */
-export async function GET(
-  _request: Request,
-  { params }: { params: Record<string, string | string[]> }
-) {
+export async function GET(_request: Request, { params }: any) {
   try {
-    const num = getIdFromParams(params);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -55,12 +51,9 @@ export async function GET(
 }
 
 /** PUT /api/dergis/:id */
-export async function PUT(
-  request: Request,
-  { params }: { params: Record<string, string | string[]> }
-) {
+export async function PUT(request: Request, { params }: any) {
   try {
-    const num = getIdFromParams(params);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -106,12 +99,9 @@ export async function PUT(
 }
 
 /** PATCH /api/dergis/:id */
-export async function PATCH(
-  request: Request,
-  { params }: { params: Record<string, string | string[]> }
-) {
+export async function PATCH(request: Request, { params }: any) {
   try {
-    const num = getIdFromParams(params);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -149,12 +139,9 @@ export async function PATCH(
 }
 
 /** DELETE /api/dergis/:id */
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Record<string, string | string[]> }
-) {
+export async function DELETE(_request: Request, { params }: any) {
   try {
-    const num = getIdFromParams(params);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
