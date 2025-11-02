@@ -1,0 +1,22 @@
+/* public/vendor/page-flip.css  */
+
+
+.page-flip {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: transparent;
+}
+
+.page-flip .page {
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.stf__block {
+  background-color: white;
+}
+
+.stf__wrapper {
+  perspective: 2000px;
+}
