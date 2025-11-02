@@ -5,8 +5,6 @@ import pool from "../../../../db/connect";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type RouteCtx = { params: Record<string, string | string[]> };
-
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -41,18 +39,18 @@ function sanitizeUserRow(row: any) {
   return row;
 }
 
-/** ctx.params.id → number güvenli çözüm */
-function getIdFromCtx(ctx: RouteCtx): number | null {
-  const raw = ctx.params?.id;
+/** params.id → number güvenli çözüm */
+function getId(params: any): number | null {
+  const raw = params?.id;
   const idStr = Array.isArray(raw) ? raw[0] : raw;
   const num = Number(idStr);
   return Number.isFinite(num) ? num : null;
 }
 
 /** GET /api/users/:id */
-export async function GET(_request: Request, context: RouteCtx) {
+export async function GET(_request: Request, { params }: any) {
   try {
-    const id = getIdFromCtx(context);
+    const id = getId(params);
     if (id === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -80,9 +78,9 @@ export async function GET(_request: Request, context: RouteCtx) {
 }
 
 /** PUT /api/users/:id */
-export async function PUT(request: Request, context: RouteCtx) {
+export async function PUT(request: Request, { params }: any) {
   try {
-    const id = getIdFromCtx(context);
+    const id = getId(params);
     if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const bodyRaw = await request.json().catch(() => ({}));
@@ -142,9 +140,9 @@ export async function PUT(request: Request, context: RouteCtx) {
 }
 
 /** PATCH /api/users/:id */
-export async function PATCH(request: Request, context: RouteCtx) {
+export async function PATCH(request: Request, { params }: any) {
   try {
-    const id = getIdFromCtx(context);
+    const id = getId(params);
     if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const body = toNullable(await request.json().catch(() => ({})));
@@ -184,9 +182,9 @@ export async function PATCH(request: Request, context: RouteCtx) {
 }
 
 /** DELETE /api/users/:id */
-export async function DELETE(_request: Request, context: RouteCtx) {
+export async function DELETE(_request: Request, { params }: any) {
   try {
-    const id = getIdFromCtx(context);
+    const id = getId(params);
     if (id === null) return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
 
     const [result] = await pool.query("DELETE FROM `users` WHERE `id` = ?", [id]);
