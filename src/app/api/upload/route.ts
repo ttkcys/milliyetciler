@@ -1,15 +1,17 @@
 // src/app/api/upload/route.ts
-import { NextNextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
-export const runtime = "nodejs";
+export const runtime = "nodejs"; // dosya sistemi için şart
 
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("file") as File | null;
-    if (!file) return NextResponse.json({ message: "file is required" }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ message: "file is required" }, { status: 400 });
+    }
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     await writeFile(path.join(dir, filename), buffer);
 
-    const rel = `yazarlar/${filename}`;  // DB'ye bunu yaz
+    const rel = `yazarlar/${filename}`; // DB'ye bunu yaz
     return NextResponse.json({ path: rel, url: `/${rel}` }, { status: 201 });
   } catch (e) {
     console.error("upload error", e);
