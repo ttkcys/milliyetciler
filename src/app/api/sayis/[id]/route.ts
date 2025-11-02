@@ -5,8 +5,6 @@ import pool from "../../../../db/connect";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type RouteCtx = { params: Record<string, string | string[]> };
-
 /** "" veya undefined → NULL */
 function toNullable(obj: Record<string, any>) {
   const out: Record<string, any> = {};
@@ -25,18 +23,18 @@ function normalizePathForDB(v?: string | null) {
   return s;
 }
 
-/** ctx.params.id → number güvenli çözüm */
-function getIdFromCtx(ctx: RouteCtx): number | null {
-  const raw = ctx.params?.id;
+/** params.id → number güvenli çözüm */
+function getId(params: any): number | null {
+  const raw = params?.id;
   const idStr = Array.isArray(raw) ? raw[0] : raw;
   const num = Number(idStr);
   return Number.isFinite(num) ? num : null;
 }
 
 /** GET /api/sayis/:id */
-export async function GET(_request: Request, context: RouteCtx) {
+export async function GET(_request: Request, { params }: any) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -62,9 +60,9 @@ export async function GET(_request: Request, context: RouteCtx) {
 }
 
 /** PUT /api/sayis/:id */
-export async function PUT(request: Request, context: RouteCtx) {
+export async function PUT(request: Request, { params }: any) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -110,9 +108,9 @@ export async function PUT(request: Request, context: RouteCtx) {
 }
 
 /** PATCH /api/sayis/:id */
-export async function PATCH(request: Request, context: RouteCtx) {
+export async function PATCH(request: Request, { params }: any) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
@@ -154,9 +152,9 @@ export async function PATCH(request: Request, context: RouteCtx) {
 }
 
 /** DELETE /api/sayis/:id */
-export async function DELETE(_request: Request, context: RouteCtx) {
+export async function DELETE(_request: Request, { params }: any) {
   try {
-    const num = getIdFromCtx(context);
+    const num = getId(params);
     if (num === null) {
       return NextResponse.json({ message: "Geçersiz ID" }, { status: 400 });
     }
