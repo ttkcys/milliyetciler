@@ -1,4 +1,5 @@
-import { NextNextRequest, NextResponse } from "next/server";
+// src/app/api/sayis/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import pool from "../../../db/connect";
 
 export const runtime = "nodejs";
@@ -16,18 +17,13 @@ function toNullable(obj: Record<string, any>) {
 function normalizePathForDB(v?: string | null) {
   if (!v) return null;
   let s = String(v).trim();
-  s = s.replace(/^https?:\/\/[^/]+\/+/, "");
-  s = s.replace(/^\/+/, "");
+  s = s.replace(/^https?:\/\/[^/]+\/+/, ""); // domain sil
+  s = s.replace(/^\/+/, "");                 // baştaki / sil
   return s;
 }
 
-/** 
+/**
  * GET /api/sayis?dergi_id=&search=&yil=&page=1&limit=20
- * - dergi_id: belirli derginin sayıları
- * - search: sayi_num veya ay (LIKE)
- * - yil: exact match (opsiyonel)
- * - sayfalama
- * - sıralama: yil ASC, sayi_num ASC (aynı ise id ASC)
  */
 export async function GET(req: NextRequest) {
   try {
@@ -89,14 +85,6 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/sayis
- * body:
- * {
- *   dergi_id (zorunlu, number),
- *   sayi_num (zorunlu, string),
- *   ay?, yil?,
- *   image?, pdf?,           // Örn: "pdfImage/Altın Işık/Altın Işık_1.jpg"  /  "pdf/Altın Işık/Altın Işık_1_compressed.pdf"
- *   toplam_sayfa?, toplam_yazi?
- * }
  */
 export async function POST(req: NextRequest) {
   try {

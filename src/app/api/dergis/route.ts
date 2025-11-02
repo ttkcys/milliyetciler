@@ -1,4 +1,5 @@
-import { NextNextRequest, NextResponse } from "next/server";
+// src/app/api/dergis/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import pool from "../../../db/connect";
 
 export const runtime = "nodejs";

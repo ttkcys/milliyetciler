@@ -1,4 +1,5 @@
-import { NextNextRequest, NextResponse } from "next/server";
+// src/app/api/users/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import pool from "../../../db/connect";
 
 export const runtime = "nodejs";
@@ -112,9 +113,9 @@ export async function POST(req: NextRequest) {
                NOW(), NOW())`,
       [
         name, email, password ?? null, level ?? null, isCan ?? 0,
-        toJsonTextOrEmptyArray(Dergi),  // NOT NULL => '[]' fallback
-        toJsonTextOrEmptyArray(Sayi),   // NOT NULL => '[]' fallback
-        toJsonTextOrEmptyArray(Yazar),  // NOT NULL => '[]' fallback
+        toJsonTextOrEmptyArray(Dergi),
+        toJsonTextOrEmptyArray(Sayi),
+        toJsonTextOrEmptyArray(Yazar),
         tel ?? null, adres ?? null, meslek ?? null, kurum ?? null, kullanim ?? null, biyografi ?? null
       ]
     );
