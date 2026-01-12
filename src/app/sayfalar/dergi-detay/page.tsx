@@ -4,7 +4,13 @@ import SearchParamsWrapper from "./SearchParamsWrapper";
 
 export default function DergiDetayPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black text-white flex items-center justify-center">Yükleniyor…</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white flex items-center justify-center">
+          Yükleniyor…
+        </div>
+      }
+    >
       <SearchParamsWrapper />
     </Suspense>
   );

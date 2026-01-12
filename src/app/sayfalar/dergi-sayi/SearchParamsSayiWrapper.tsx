@@ -39,12 +39,11 @@ type Yazi = {
   sayfa: number | null;
 };
 
-function pdfFromRule(dergiIsim: string, sayiNo: number) {
-  const enc = encodeURIComponent((dergiIsim || "").trim());
-  return `/pdf/${enc}/${enc}_${sayiNo}_compressed.pdf`;
+/* ---- Yardımcılar ---- */
+function apiBase() {
+  return String(process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 }
 
-/* ---- Yardımcılar ---- */
 const placeholderCover = () => "/logo/logo_color.svg";
 
 function normalizePublicPath(p?: string | null) {
@@ -81,8 +80,10 @@ function coverFromPdfImageRaw(dergiIsim: string, no: number) {
 function issueCover(dergiIsim: string | undefined, sayi: Sayi) {
   const fromImage = normalizePublicPath(sayi.image || undefined);
   if (fromImage && !/^\/?public\/pdfs?/i.test(sayi.image || "")) return fromImage;
+
   const fromPdf = pdfPathToImage(sayi.pdf);
   if (fromPdf) return fromPdf;
+
   if (dergiIsim) return coverFromPdfImageRaw(dergiIsim, extractIssueNo(sayi.sayi_num));
   return placeholderCover();
 }
@@ -93,6 +94,8 @@ export default function SearchParamsSayiWrapper() {
   const idParam = sp.get("id");
   const sayiId = idParam ? Number(idParam) : NaN;
 
+  const API = apiBase();
+
   const [sayi, setSayi] = useState<Sayi | null>(null);
   const [dergi, setDergi] = useState<Dergi | null>(null);
   const [yazilar, setYazilar] = useState<Yazi[]>([]);
@@ -101,26 +104,44 @@ export default function SearchParamsSayiWrapper() {
 
   // verileri çek
   useEffect(() => {
-    if (!sayiId) return;
+    if (!idParam || Number.isNaN(sayiId)) return;
+
+    if (!API) {
+      setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+      setLoading(false);
+      return;
+    }
+
     let cancel = false;
+
     (async () => {
       try {
         setLoading(true);
         setErr(null);
 
         // 1) sayı
-        const rSayi = await fetch(`/api/sayis/${sayiId}`, { cache: "no-store" });
+        const rSayi = await fetch(`${API}/sayis/${sayiId}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
         if (!rSayi.ok) throw new Error("Sayı bulunamadı");
         const s = (await rSayi.json()) as Sayi;
         if (cancel) return;
         setSayi(s);
 
         // 2) dergi
-        const rD = await fetch(`/api/dergis/${s.dergi_id}`, { cache: "no-store" });
+        const rD = await fetch(`${API}/dergis/${s.dergi_id}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
         if (rD.ok) setDergi((await rD.json()) as Dergi);
 
         // 3) yazılar
-        const rY = await fetch(`/api/yazis?sayi_id=${sayiId}&limit=1000`, { cache: "no-store" });
+        const rY = await fetch(`${API}/yazis?sayi_id=${sayiId}&limit=1000`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
         let rows: YaziApiRow[] = [];
         if (rY.ok) {
           const j = await rY.json();
@@ -129,7 +150,7 @@ export default function SearchParamsSayiWrapper() {
 
         const mapped: Yazi[] = rows.map((x) => ({
           id: x.id,
-          sayi_id: x.sayi_id ?? s.id,
+          sayi_id: (x.sayi_id ?? s.id) as number,
           baslik: x.baslik ?? "-",
           yazar: x.yazar_isim ?? "-",
           yazar_id: x.yazar_id ?? null,
@@ -143,10 +164,11 @@ export default function SearchParamsSayiWrapper() {
         if (!cancel) setLoading(false);
       }
     })();
+
     return () => {
       cancel = true;
     };
-  }, [sayiId]);
+  }, [API, idParam, sayiId]);
 
   const kapak = useMemo(
     () => (sayi && dergi ? issueCover(dergi.isim, sayi) : placeholderCover()),
@@ -179,10 +201,17 @@ export default function SearchParamsSayiWrapper() {
       {/* Üst şerit / breadcrumb */}
       <div className="border-b border-[#333]">
         <div className="mx-auto max-w-7xl px-6 py-4 text-sm">
-          <a href="/" className="text-white/60 hover:text-[#ffc451]">Anasayfa</a>
+          <a href="/" className="text-white/60 hover:text-[#ffc451]">
+            Anasayfa
+          </a>
           <span className="text-white/40 mx-1.5">›</span>
           {dergi ? (
-            <a href={`/sayfalar/dergi-detay?id=${dergi.id}`} className="text-white/60 hover:text-[#ffc451]">{dergi.isim}</a>
+            <a
+              href={`/sayfalar/dergi-detay?id=${dergi.id}`}
+              className="text-white/60 hover:text-[#ffc451]"
+            >
+              {dergi.isim}
+            </a>
           ) : (
             <span className="text-white/60">Dergi</span>
           )}
@@ -226,11 +255,23 @@ export default function SearchParamsSayiWrapper() {
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan={3} className="px-4 py-10 text-center text-white/60">Yükleniyor…</td></tr>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-10 text-center text-white/60">
+                        Yükleniyor…
+                      </td>
+                    </tr>
                   ) : err ? (
-                    <tr><td colSpan={3} className="px-4 py-10 text-center text-red-400">Hata: {err}</td></tr>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-10 text-center text-red-400">
+                        Hata: {err}
+                      </td>
+                    </tr>
                   ) : yazilar.length === 0 ? (
-                    <tr><td colSpan={3} className="px-4 py-10 text-center text-white/60">Bu sayıya ait yazı kaydı yok.</td></tr>
+                    <tr>
+                      <td colSpan={3} className="px-4 py-10 text-center text-white/60">
+                        Bu sayıya ait yazı kaydı yok.
+                      </td>
+                    </tr>
                   ) : (
                     yazilar
                       .slice()
@@ -261,7 +302,9 @@ export default function SearchParamsSayiWrapper() {
               src={kapak}
               alt={baslik}
               className="w-full object-contain"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = placeholderCover(); }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = placeholderCover();
+              }}
             />
           </div>
 

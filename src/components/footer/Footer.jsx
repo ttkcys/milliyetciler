@@ -8,9 +8,9 @@ import { BookOpen, Layers, FileText, Users } from "lucide-react";
 
 const STATS = [
   { icon: BookOpen, label: "Dergiler", count: "0", href: "/sayfalar/dergiler" },
-  { icon: Layers,   label: "Sayılar",  count: "0" },
-  { icon: FileText, label: "Yazılar",  count: "0", href: "/sayfalar/yazarlar" },
-  { icon: Users,    label: "Yazarlar", count: "0" },
+  { icon: Layers, label: "Sayılar", count: "0", href: "/sayfalar/sayilar" },
+  { icon: FileText, label: "Yazılar", count: "0", href: "/sayfalar/yazilar" },
+  { icon: Users, label: "Yazarlar", count: "0", href: "/sayfalar/yazarlar" },
 ];
 
 const MENU_ITEMS = [
@@ -20,7 +20,7 @@ const MENU_ITEMS = [
   { label: "Bağış", href: "/sayfalar/bagis" },
   { label: "Arama", href: "/sayfalar/arama" },
   { label: "Hakkında", href: "/sayfalar/hakkinda/hakkimizda" },
-  { label: "Kadro", href: "/sayfalar/kadro" },
+  { label: "Kadro", href: "/sayfalar/hakkinda/kadro" },
   { label: "Katkıda Bulunanlar", href: "/sayfalar/hakkinda/katkida-bulunanlar" },
   { label: "İletişim", href: "/sayfalar/iletisim" },
   { label: "Kullanım Koşulları", href: "/sayfalar/kullanim-kosullari" },
@@ -59,21 +59,28 @@ export default function Footer() {
   }, []);
 
   // API'den toplamları çek (sıra STATS ile aynı: Dergiler, Sayılar, Yazılar, Yazarlar)
+  // Footer.jsx - fetchCounts fonksiyonunu güncelle
   useEffect(() => {
     let cancelled = false;
 
     async function fetchCounts() {
       try {
+        // ✅ API_BASE'i environment variable'dan al
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api";
+
         const endpoints = [
-          "/api/dergis?limit=1",
-          "/api/sayis?limit=1",
-          "/api/yazis?limit=1",
-          "/api/yazars?limit=1",
+          `${API_BASE}/dergis?limit=1`,    // ✅ /api/dergis yerine ${API_BASE}/dergis
+          `${API_BASE}/sayis?limit=1`,     // ✅ /api/sayis yerine ${API_BASE}/sayis
+          `${API_BASE}/yazis?limit=1`,     // ✅ /api/yazis yerine ${API_BASE}/yazis
+          `${API_BASE}/yazars?limit=1`,    // ✅ /api/yazars yerine ${API_BASE}/yazars
         ];
 
         const resps = await Promise.allSettled(
           endpoints.map((url) =>
-            fetch(url, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null))
+            fetch(url, {
+              cache: "no-store",
+              credentials: "include" // ✅ Cookie'leri de gönder (gerekirse)
+            }).then((r) => (r.ok ? r.json() : null))
           )
         );
 
@@ -87,12 +94,11 @@ export default function Footer() {
 
         if (!cancelled) {
           setTargets(totals);
-          // Eğer daha önce animasyon başladıysa ama yanlış/fallback değerle başladıysa
-          // animasyonu tekrar doğru hedeflere göre başlatabilmek için resetliyoruz.
           setAnimated(totals.map(() => 0));
           setStarted(false);
         }
-      } catch {
+      } catch (error) {
+        console.error("fetchCounts error:", error);
         // Sessizce fallback'lerle devam
       }
     }

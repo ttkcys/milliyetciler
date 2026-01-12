@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { User, Save, Loader2 } from "lucide-react";
+import { User, Loader2 } from "lucide-react";
 
 /** Yardımcılar */
-function clsx(...a) {
+function clsx(...a: any[]) {
   return a.filter(Boolean).join(" ");
 }
-function normalizeNullable(v) {
+function normalizeNullable(v: any) {
   if (v === undefined) return null;
   const s = String(v ?? "").trim();
   return s === "" ? null : s;
@@ -17,10 +17,10 @@ function normalizeNullable(v) {
 export default function AccountPage() {
   const router = useRouter();
 
-  const [me, setMe] = useState(null);
+  const [me, setMe] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState(null);
+  const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
   // form state
@@ -47,25 +47,45 @@ export default function AccountPage() {
     []
   );
 
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+
   // Me’yi yükle
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
+      if (!API_BASE) {
+        setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        const res = await fetch("/api/me", {
+        const res = await fetch(`${API_BASE}/me`, {
           cache: "no-store",
           credentials: "include",
         });
+
+        if (res.status === 401) {
+          const next = "/hesabim";
+          router.replace((`/giris-yap?next=${encodeURIComponent(next)}` as any));
+
+
+          return;
+        }
+
         if (!res.ok) {
           setErr("Oturum bulunamadı. Lütfen giriş yapın.");
           setMe(null);
           return;
         }
+
         const data = await res.json();
         if (cancelled) return;
+
         setMe(data);
-        // formu doldur
+
         setName(data?.name ?? "");
         setEmail(data?.email ?? "");
         setTel(data?.tel ?? "");
@@ -80,20 +100,34 @@ export default function AccountPage() {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [API_BASE, router]);
 
-  async function onSubmit(e) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     setOk(false);
+
+    if (!API_BASE) {
+      setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+      return;
+    }
+
+    if (!me?.id) {
+      setErr("Kullanıcı bulunamadı.");
+      return;
+    }
 
     if (!name || !email) {
       setErr("İsim ve e-posta zorunludur.");
       return;
     }
+
+    // ⚠️ Backend'in şu an old_password kontrolü yapmıyor.
+    // Burada sadece UI doğrulaması olarak bırakıyoruz.
     if (newPass || newPass2) {
       if (!oldPass) {
         setErr("Şifre değiştirmek için eski şifrenizi girin.");
@@ -112,12 +146,9 @@ export default function AccountPage() {
     try {
       setSaving(true);
 
-      // PATCH /api/users/:id — backend’in kolon adlarına göre gönderiyoruz
-      const body = {
+      const body: any = {
         name,
         email,
-        // şifre değişecekse gönder
-        ...(newPass ? { password: newPass, old_password: oldPass } : {}),
         tel: normalizeNullable(tel),
         adres: normalizeNullable(adres),
         meslek: normalizeNullable(meslek),
@@ -126,7 +157,14 @@ export default function AccountPage() {
         biyografi: normalizeNullable(biyografi),
       };
 
-      const res = await fetch(`/api/users/${me?.id}`, {
+      // Backend'in UserController'ı password alanını direkt update ediyor.
+      // old_password backend'de kullanılmıyor; yine de istersen gönderebilirsin.
+      if (newPass) {
+        body.password = newPass;
+        body.old_password = oldPass;
+      }
+
+      const res = await fetch(`${API_BASE}/users/${me.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -139,7 +177,7 @@ export default function AccountPage() {
         try {
           const j = await res.json();
           if (j?.message) msg = j.message;
-        } catch {}
+        } catch { }
         setErr(msg);
         return;
       }
@@ -148,14 +186,15 @@ export default function AccountPage() {
       setOldPass("");
       setNewPass("");
       setNewPass2("");
+
       // güncel me’yi tekrar çek
       try {
-        const meRes = await fetch("/api/me", {
+        const meRes = await fetch(`${API_BASE}/me`, {
           cache: "no-store",
           credentials: "include",
         });
         if (meRes.ok) setMe(await meRes.json());
-      } catch {}
+      } catch { }
     } catch {
       setErr("Ağ hatası. Lütfen tekrar deneyin.");
     } finally {
@@ -185,7 +224,6 @@ export default function AccountPage() {
 
       {/* İçerik */}
       <div className="mx-auto max-w-4xl px-6 py-10 md:py-12">
-        {/* uyarılar */}
         {err && (
           <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {err}
@@ -208,11 +246,8 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* İsim */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  İsminiz
-                </label>
+                <label className="mb-2 block text-sm text-white/70">İsminiz</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -222,11 +257,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Email */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  E-posta adresi
-                </label>
+                <label className="mb-2 block text-sm text-white/70">E-posta adresi</label>
                 <input
                   type="email"
                   value={email}
@@ -238,11 +270,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Eski şifre */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Eski Şifre
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Eski Şifre</label>
                 <input
                   type="password"
                   value={oldPass}
@@ -253,11 +282,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Yeni şifre */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Yeni Şifre
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Yeni Şifre</label>
                 <input
                   type="password"
                   value={newPass}
@@ -268,11 +294,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Yeni şifre onay */}
               <div className="col-span-1 md:col-span-2">
-                <label className="mb-2 block text-sm text-white/70">
-                  Şifrenizi Onaylayın
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Şifrenizi Onaylayın</label>
                 <input
                   type="password"
                   value={newPass2}
@@ -286,11 +309,8 @@ export default function AccountPage() {
                 </p>
               </div>
 
-              {/* Telefon */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Telefon Numarası
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Telefon Numarası</label>
                 <div className="flex">
                   <span className="select-none inline-flex items-center rounded-l-lg border border-r-0 border-[#333] bg-[#1a1a1a] px-3 text-sm text-white/70">
                     +90
@@ -305,11 +325,8 @@ export default function AccountPage() {
                 </div>
               </div>
 
-              {/* Meslek */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Meslek
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Meslek</label>
                 <select
                   value={meslek}
                   onChange={(e) => setMeslek(e.target.value)}
@@ -324,11 +341,8 @@ export default function AccountPage() {
                 </select>
               </div>
 
-              {/* Kullanım amacı */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Kullanım Amacı
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Kullanım Amacı</label>
                 <select
                   value={kullanim}
                   onChange={(e) => setKullanim(e.target.value)}
@@ -343,11 +357,8 @@ export default function AccountPage() {
                 </select>
               </div>
 
-              {/* Kurum */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Kurumunuz
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Kurumunuz</label>
                 <input
                   value={kurum}
                   onChange={(e) => setKurum(e.target.value)}
@@ -356,11 +367,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Adres */}
               <div className="col-span-1">
-                <label className="mb-2 block text-sm text-white/70">
-                  Adres
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Adres</label>
                 <input
                   value={adres}
                   onChange={(e) => setAdres(e.target.value)}
@@ -369,11 +377,8 @@ export default function AccountPage() {
                 />
               </div>
 
-              {/* Biyografi */}
               <div className="col-span-1 md:col-span-2">
-                <label className="mb-2 block text-sm text-white/70">
-                  Biyografi
-                </label>
+                <label className="mb-2 block text-sm text-white/70">Biyografi</label>
                 <textarea
                   value={biyografi}
                   onChange={(e) => setBiyografi(e.target.value)}
@@ -387,7 +392,7 @@ export default function AccountPage() {
                   type="submit"
                   disabled={saving || loading || !me}
                   className={clsx(
-                    "cursor-pointer inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#ffc451] to-[#ffb020] px-6 py-3 text-sm font-semibold text-[#1a1a1a] transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-[#ffc451]/30 disabled:cursor-not-allowed disabled:opacity-60"
+                    "inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#ffc451] to-[#ffb020] px-6 py-3 text-sm font-semibold text-[#1a1a1a] transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-[#ffc451]/30 disabled:cursor-not-allowed disabled:opacity-60"
                   )}
                 >
                   {saving ? (
@@ -396,10 +401,7 @@ export default function AccountPage() {
                       Kaydediliyor…
                     </>
                   ) : (
-                    <>
-                      
-                      Bilgilerimi Güncelle
-                    </>
+                    <>Bilgilerimi Güncelle</>
                   )}
                 </button>
               </div>
@@ -407,7 +409,6 @@ export default function AccountPage() {
           )}
         </form>
 
-        {/* Alt ipucu */}
         <p className="mt-4 text-center text-xs text-white/40">
           Bir sorun mu yaşıyorsunuz?{" "}
           <a href="/sayfalar/iletisim" className="text-[#ffc451] hover:underline">

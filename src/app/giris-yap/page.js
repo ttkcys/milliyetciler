@@ -12,6 +12,8 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
 
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+
   async function onSubmit(e) {
     e.preventDefault();
     setErr(null);
@@ -29,14 +31,28 @@ export default function SignInPage() {
       return;
     }
 
+    if (!API_BASE) {
+      setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/login", {
+      // 1) Login -> cookie set edilmeli
+      console.log("Login attempt:", { email, API_BASE });
+
+      const res = await fetch(`${API_BASE}/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({ email, password }),
         cache: "no-store",
-        credentials: "include",
+        credentials: "include", // ✅ CRITICAL: Cookie için gerekli
       });
+
+      console.log("Login response status:", res.status);
 
       if (!res.ok) {
         let msg =
@@ -45,17 +61,51 @@ export default function SignInPage() {
             : "Giriş yapılamadı. Lütfen tekrar deneyin.";
         try {
           const j = await res.json();
+          console.log("Login error response:", j);
           if (j?.message) msg = j.message;
-        } catch {}
+        } catch (e) {
+          console.error("Parse error:", e);
+        }
         setErr(msg);
         return;
       }
 
-      // Başarılı giriş -> her zaman dergiler sayfasına
+      // 2) Başarılı yanıtı işle
+      const data = await res.json();
+      console.log("Login success data:", data);
+
+      // 3) Cookie kontrolü için /me endpoint'ini çağır
+      const meRes = await fetch(`${API_BASE}/me`, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include", // ✅ Cookie'leri gönder
+      });
+
+      console.log("/me response status:", meRes.status);
+
+      if (!meRes.ok) {
+        const errorText = await meRes.text();
+        console.error("/me error:", errorText);
+
+        let msg = "Giriş yapıldı ama oturum doğrulanamadı.";
+        try {
+          const j = JSON.parse(errorText);
+          if (j?.message) msg = j.message;
+        } catch {}
+
+        setErr(msg);
+        return;
+      }
+
+      const meData = await meRes.json();
+      console.log("/me success data:", meData);
+
+      // Her şey ok -> yönlendir
+      console.log("Redirecting to /sayfalar/dergiler");
       router.replace("/sayfalar/dergiler");
       router.refresh();
-      return;
-    } catch {
+    } catch (error) {
+      console.error("Login catch error:", error);
       setErr("Ağ hatası. Lütfen bağlantınızı kontrol edin.");
     } finally {
       setLoading(false);

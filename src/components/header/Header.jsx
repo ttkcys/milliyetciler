@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { User } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const NAV = [
   { label: "Dergiler", href: "/sayfalar/dergiler" },
@@ -20,7 +21,7 @@ const ABOUT_SUB = [
 
 export default function Header() {
   const pathname = usePathname();
-
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -41,46 +42,81 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [lastScrollY]);
 
-  // /api/me kontrolünü fonksiyon yap
+
   const checkMe = useCallback(async () => {
     try {
       setChecking(true);
-      const res = await fetch("/api/me", {
+
+      // ✅ API_BASE'i environment variable'dan al
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api";
+
+      const res = await fetch(`${API_BASE}/me`, {  // ✅ /api/me yerine ${API_BASE}/me
         cache: "no-store",
-        credentials: "include", // cookie'yi garanti gönder
+        credentials: "include",
       });
+
       if (res.ok) {
         const data = await res.json();
         setMe(data || null);
       } else {
         setMe(null);
       }
-    } catch {
+    } catch (error) {
+      console.error("checkMe error:", error);
       setMe(null);
     } finally {
       setChecking(false);
     }
   }, []);
 
+  async function onLogout() {
+    console.log("=== LOGOUT PROCESS ===");
+    setChecking(true);
+
+    try {
+      const API_BASE =
+        process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api";
+
+      const res = await fetch(`${API_BASE}/logout`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      console.log("Logout status:", res.status);
+
+      // cookie gerçekten silindi mi -> /me ile doğrula
+      await checkMe(); // ✅ en önemli satır
+
+      router.replace("/");
+      router.refresh();
+    } catch (e) {
+      console.error("Logout error:", e);
+      setMe(null); // en azından UI temizlensin
+      router.replace("/");
+      router.refresh();
+    } finally {
+      setChecking(false);
+    }
+  }
+
+
+
+
   // İlk açılışta ve route değişince kontrol et
   useEffect(() => {
     checkMe();
   }, [checkMe, pathname]);
 
-  // Pencere odağa gelince (örn. login yönlendirmesi sonrası) tekrar kontrol et
+  // Pencere odağa gelince tekrar kontrol et
   useEffect(() => {
     const onFocus = () => checkMe();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [checkMe]);
 
-  async function onLogout() {
-    try {
-      await fetch("/api/logout", { method: "POST", credentials: "include" });
-    } catch { }
-    // Tam temiz sayfa
-    window.location.reload();
-  }
+
 
   return (
     <header
@@ -187,6 +223,17 @@ export default function Header() {
                       Listelerim
                     </a>
                   </li>
+                  {/* Admin butonu - sadece level === 1 ise göster */}
+                  {me?.level === 1 && (
+                    <li>
+                      <a
+                        href="/admin"
+                        className="block rounded-lg px-4 py-3 text-[13px] text-[#ffc451] hover:text-white hover:bg-[#ffc451]/10 transition-all duration-200 font-semibold"
+                      >
+                        Admin'e Git
+                      </a>
+                    </li>
+                  )}
                   <li>
                     <button
                       onClick={onLogout}
@@ -270,12 +317,29 @@ export default function Header() {
               {me ? (
                 <>
                   <a
-                    href="/hesabim"
+                    href="/profilim"
                     className="mt-3 rounded-full bg-white/10 px-6 py-3 text-center text-[14px] font-semibold text-white hover:bg-white/20 transition-all duration-300"
                     onClick={() => setOpen(false)}
                   >
-                    Hesabım
+                    Profilim
                   </a>
+                  <a
+                    href="/listelerim"
+                    className="mt-2 rounded-full bg-white/10 px-6 py-3 text-center text-[14px] font-semibold text-white hover:bg-white/20 transition-all duration-300"
+                    onClick={() => setOpen(false)}
+                  >
+                    Listelerim
+                  </a>
+                  {/* Mobil Admin butonu */}
+                  {me?.level === 1 && (
+                    <a
+                      href="/admin"
+                      className="mt-2 rounded-full bg-[#ffc451]/20 px-6 py-3 text-center text-[14px] font-bold text-[#ffc451] hover:bg-[#ffc451]/30 transition-all duration-300"
+                      onClick={() => setOpen(false)}
+                    >
+                      Admin'e Git
+                    </a>
+                  )}
                   <button
                     onClick={() => {
                       setOpen(false);

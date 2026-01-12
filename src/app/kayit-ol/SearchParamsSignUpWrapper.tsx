@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { BookOpen } from "lucide-react";
 import type { Route } from "next";
 
-
 export default function SearchParamsSignUpWrapper() {
     const router = useRouter();
     const sp = useSearchParams();
@@ -17,6 +16,8 @@ export default function SearchParamsSignUpWrapper() {
     const [loading, setLoading] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const [ok, setOk] = useState(false);
+
+    const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
     async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -41,15 +42,21 @@ export default function SearchParamsSignUpWrapper() {
             setErr("Şifreler uyuşmuyor.");
             return;
         }
+        if (!API_BASE) {
+            setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+            return;
+        }
 
         setLoading(true);
 
         try {
-            const res = await fetch("/api/users", {
+            const res = await fetch(`${API_BASE}/users`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, email, password }),
                 cache: "no-store",
+                // cookie gerekmiyor ama tutarlılık için:
+                credentials: "include",
             });
 
             if (!res.ok) {
@@ -64,14 +71,13 @@ export default function SearchParamsSignUpWrapper() {
 
             setOk(true);
 
-            // 1 sn bilgi ver, sonra login sayfasına next ile yönlendir
             setTimeout(() => {
-                router.replace(`/giris-yap?next=${encodeURIComponent(nextUrl)}` as Route);
-
-
+                router.replace(
+                    `/giris-yap?next=${encodeURIComponent(nextUrl)}` as Route
+                );
             }, 1000);
 
-            if (e.currentTarget && typeof (e.currentTarget as any).reset === "function") {
+            if (typeof (e.currentTarget as any).reset === "function") {
                 (e.currentTarget as any).reset();
             }
         } catch {
@@ -87,7 +93,12 @@ export default function SearchParamsSignUpWrapper() {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,196,81,0.1),transparent_50%)]" />
                 <div className="relative mx-auto max-w-7xl px-6 py-16 md:py-24">
                     <nav className="mb-8 flex items-center gap-2 text-sm">
-                        <a href="/" className="text-white/60 hover:text-[#ffc451] transition-colors">Anasayfa</a>
+                        <a
+                            href="/"
+                            className="text-white/60 hover:text-[#ffc451] transition-colors"
+                        >
+                            Anasayfa
+                        </a>
                         <span className="text-white/40">›</span>
                         <span className="text-[#ffc451] font-medium">Kayıt Ol</span>
                     </nav>
@@ -98,7 +109,9 @@ export default function SearchParamsSignUpWrapper() {
                         </div>
                         <div>
                             <h1 className="text-4xl md:text-5xl font-bold">Kayıt Ol</h1>
-                            <p className="text-white/60 text-lg mt-1">Yeni bir hesap oluşturun.</p>
+                            <p className="text-white/60 text-lg mt-1">
+                                Yeni bir hesap oluşturun.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -122,7 +135,12 @@ export default function SearchParamsSignUpWrapper() {
 
                     <div className="space-y-5">
                         <div>
-                            <label htmlFor="name" className="mb-2 block text-sm text-white/70">İsminiz</label>
+                            <label
+                                htmlFor="name"
+                                className="mb-2 block text-sm text-white/70"
+                            >
+                                İsminiz
+                            </label>
                             <input
                                 id="name"
                                 name="name"
@@ -134,7 +152,12 @@ export default function SearchParamsSignUpWrapper() {
                         </div>
 
                         <div>
-                            <label htmlFor="email" className="mb-2 block text-sm text-white/70">E-posta adresi</label>
+                            <label
+                                htmlFor="email"
+                                className="mb-2 block text-sm text-white/70"
+                            >
+                                E-posta adresi
+                            </label>
                             <input
                                 id="email"
                                 name="email"
@@ -147,7 +170,12 @@ export default function SearchParamsSignUpWrapper() {
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="mb-2 block text-sm text-white/70">Şifre</label>
+                            <label
+                                htmlFor="password"
+                                className="mb-2 block text-sm text-white/70"
+                            >
+                                Şifre
+                            </label>
                             <div className="relative">
                                 <input
                                     id="password"
@@ -170,7 +198,12 @@ export default function SearchParamsSignUpWrapper() {
                         </div>
 
                         <div>
-                            <label htmlFor="password2" className="mb-2 block text-sm text-white/70">Şifrenizi Onaylayın</label>
+                            <label
+                                htmlFor="password2"
+                                className="mb-2 block text-sm text-white/70"
+                            >
+                                Şifrenizi Onaylayın
+                            </label>
                             <div className="relative">
                                 <input
                                     id="password2"
@@ -199,9 +232,24 @@ export default function SearchParamsSignUpWrapper() {
                         >
                             {loading ? (
                                 <>
-                                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 004 12z" />
+                                    <svg
+                                        className="h-4 w-4 animate-spin"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                    >
+                                        <circle
+                                            className="opacity-25"
+                                            cx="12"
+                                            cy="12"
+                                            r="10"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                        />
+                                        <path
+                                            className="opacity-75"
+                                            fill="currentColor"
+                                            d="M4 12a8 8 0 018-8v4A4 4 0 004 12z"
+                                        />
                                     </svg>
                                     Kayıt oluyor…
                                 </>
@@ -218,7 +266,6 @@ export default function SearchParamsSignUpWrapper() {
                             >
                                 Giriş Yapın.
                             </Link>
-
                         </p>
                     </div>
                 </form>

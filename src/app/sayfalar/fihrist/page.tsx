@@ -1,4 +1,3 @@
-// app/fihrist/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,8 +73,9 @@ function sortIcon(dir?: "asc" | "desc") {
 type SortKey = "name" | "owner" | "editor" | "city" | "startYear" | "endYear" | "total";
 type SortState = { key: SortKey; dir: "asc" | "desc" };
 
-/* ---------- İstek atılacak endpoint ---------- */
-const ENDPOINT = "/api/dergis";
+/* ---------- PHP/Laravel API Base ---------- */
+// örn: NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000/api
+const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
 /* ---------- Adaptörler ---------- */
 function toIntOrNull(v: unknown): number | null {
@@ -84,7 +84,6 @@ function toIntOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Türkçe küçük harfe indir, aksanları sadeleştir. */
 function trFold(s: string) {
   return s
     .toLocaleLowerCase("tr")
@@ -92,21 +91,18 @@ function trFold(s: string) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-/** telif alanından bağış durumunu güvenli çıkarır. */
 function parseDonation(telif: unknown): boolean | null {
   if (telif === null || telif === undefined) return null;
   const raw = String(telif).trim();
   if (!raw) return null;
   const s = trFold(raw);
 
-  // Negatif kalıplar (öncelik)
   const negative =
     /(bagis deg(il|ildir)?|bagis yok|bagis alinmadi|telif(li)?|ucret(li)?|parali|satilik|satildi)/i.test(
       s
     );
   if (negative) return false;
 
-  // Pozitif kalıplar
   const positive =
     /(bagis|hibe|bagislandi|bagis yoluyla|bağış)/i.test(s) || /\b(true|1|evet|yes)\b/.test(s);
   if (positive) return true;
@@ -135,14 +131,12 @@ const collTR = new Intl.Collator("tr", { sensitivity: "base", numeric: true });
 function cmp(a: Row, b: Row, key: SortKey, dir: "asc" | "desc") {
   const mul = dir === "asc" ? 1 : -1;
 
-  // Sayısal sütunlar
   if (key === "startYear" || key === "endYear" || key === "total") {
-    const an = (typeof a[key] === "number" ? a[key] : toIntOrNull(a[key] as any)) ?? -Infinity;
-    const bn = (typeof b[key] === "number" ? b[key] : toIntOrNull(b[key] as any)) ?? -Infinity;
+    const an = (typeof a[key] === "number" ? a[key] : toIntOrNull((a as any)[key])) ?? -Infinity;
+    const bn = (typeof b[key] === "number" ? b[key] : toIntOrNull((b as any)[key])) ?? -Infinity;
     return (an - bn) * mul;
   }
 
-  // String sütunlar — Türkçe duyarlı, numerik bilinçli
   const av = String((a as any)[key] ?? "");
   const bv = String((b as any)[key] ?? "");
   return collTR.compare(av, bv) * mul;
@@ -158,7 +152,7 @@ export default function FihristPage() {
   const [fEditor, setFEditor] = useState("");
   const [fDonation, setFDonation] = useState<"all" | "bagis" | "none">("all");
 
-  /* ---------- Sıralama (varsayılan: Dergi Adı A→Z) ---------- */
+  /* ---------- Sıralama ---------- */
   const [sort, setSort] = useState<SortState>({ key: "name", dir: "asc" });
   function toggleSort(key: SortKey) {
     setSort((s) =>
@@ -171,15 +165,22 @@ export default function FihristPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // debounce
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // /api/dergis çağrısı (sayfalama yok; tüm veriyi çek)
+  // ✅ Laravel endpoint
+  const ENDPOINT = `${API_BASE}/dergis`;
+
   const fetchList = (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
 
-    // Backend alan bazlı filtre almıyor; hepsini tek search’e sıkıştır.
+    if (!API_BASE) {
+      setRows([]);
+      setLoading(false);
+      setError("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+      return;
+    }
+
     const tokens: string[] = [];
     if (fName.trim()) tokens.push(fName.trim());
     if (fCity.trim()) tokens.push(fCity.trim());
@@ -190,20 +191,35 @@ export default function FihristPage() {
 
     const params = new URLSearchParams();
     params.set("page", "1");
-    params.set("limit", "100000"); // tüm kayıtlar
+    params.set("limit", "100000");
     if (tokens.length) params.set("search", tokens.join(" "));
 
-    fetch(`${ENDPOINT}?${params.toString()}`, { cache: "no-store", signal })
+    fetch(`${ENDPOINT}?${params.toString()}`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "include", // ✅ cookie için
+      headers: { Accept: "application/json" },
+      signal,
+    })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        if (!res.ok) {
+          let msg = `HTTP ${res.status} ${res.statusText}`;
+          try {
+            const j = await res.json();
+            if (j?.message) msg = j.message;
+          } catch {}
+          throw new Error(msg);
+        }
+
         const json = (await res.json()) as DergiListResponse;
         const mapped = (json.data || []).map(mapRow);
 
-        // Bağış filtresi (client-side). "none" => donation !== true (false veya null)
         const filtered =
           fDonation === "all"
             ? mapped
-            : mapped.filter((r) => (fDonation === "bagis" ? r.donation === true : r.donation !== true));
+            : mapped.filter((r) =>
+                fDonation === "bagis" ? r.donation === true : r.donation !== true
+              );
 
         setRows(filtered);
       })
@@ -215,7 +231,6 @@ export default function FihristPage() {
       .finally(() => setLoading(false));
   };
 
-  // Filtreler değişince istek (sayfalama yok)
   useEffect(() => {
     const controller = new AbortController();
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -227,7 +242,6 @@ export default function FihristPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fName, fStart, fEnd, fCity, fOwner, fEditor, fDonation]);
 
-  // İstemci sıralama (varsayılan: name asc)
   const sortedRows = useMemo(() => {
     const arr = [...rows];
     arr.sort((a, b) => cmp(a, b, sort.key, sort.dir));

@@ -16,60 +16,39 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-/* ====================== Tipler ====================== */
-type Dergi = { id: number; isim: string; alt_baslik?: string | null };
-type Sayi = {
-  id: number;
-  dergi_id: number;
-  sayi_num: string;
-  ay: string | null;
-  yil: number | null;
-  image?: string | null;
-  pdf?: string | null;
-  toplam_sayfa?: number | null;
-  toplam_yazi?: number | null;
-};
-type Yazar = { id: number; isim: string };
-
-type YaziRow = {
-  id: number;
-  baslik: string | null;
-  alt_baslik: string | null;
-  sayi_id: number | null;
-  dergi_id: number | null;
-  dergi_isim: string | null;
-  sayi_num: string | null;
-  ay: string | null;
-  yil: number | null;
-  sayfa: number | null;
-  yazar_id?: number | null;
-  yazar_isim?: string | null; // API'den geliyor
-};
-
-type Counters = { dergi: number; sayi: number; yazi: number; yazar: number };
-
-type ResultItem =
-  | { kind: "dergi"; data: Dergi }
-  | { kind: "sayi"; data: Sayi & { dergi_isim?: string | null } }
-  | { kind: "yazi"; data: YaziRow }
-  | { kind: "yazar"; data: Yazar };
-
 /* ====================== Yardımcılar ====================== */
-function badge(kind: ResultItem["kind"]) {
+function badge(kind) {
   if (kind === "dergi") return "Dergi";
   if (kind === "sayi") return "Sayı";
   if (kind === "yazi") return "Yazı";
   return "Yazar";
 }
-function KindIcon({ kind }: { kind: ResultItem["kind"] }) {
+function KindIcon({ kind }) {
   if (kind === "dergi") return <LibraryBig className="w-4 h-4" />;
   if (kind === "sayi") return <Layers3 className="w-4 h-4" />;
   if (kind === "yazi") return <FileText className="w-4 h-4" />;
   return <Feather className="w-4 h-4" />;
 }
-async function fetchJSON<T>(url: string): Promise<T> {
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(url + " -> " + r.status);
+
+function apiBase() {
+  // örn: http://127.0.0.1:8000/api
+  return String(process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(url, {
+    cache: "no-store",
+    credentials: "include", // <<< login cookie (uid) vs lazım
+  });
+  if (!r.ok) {
+    // hata mesajı varsa oku
+    let msg = url + " -> " + r.status;
+    try {
+      const j = await r.json();
+      if (j?.message) msg = j.message;
+    } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -77,13 +56,13 @@ async function fetchJSON<T>(url: string): Promise<T> {
 export default function SearchParamsAramaWrapper() {
   const sp = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
 
   const qGeneral0 = sp.get("q") || "";
   const qDergi0 = sp.get("dergi") || "";
   const qYil0 = sp.get("yil") || "";
   const qYazi0 = sp.get("yazi") || "";
   const qYazar0 = sp.get("yazar") || "";
-  const pathname = usePathname();
 
   const [qGeneral, setQGeneral] = useState(qGeneral0);
   const [qDergi, setQDergi] = useState(qDergi0);
@@ -91,7 +70,7 @@ export default function SearchParamsAramaWrapper() {
   const [qYazi, setQYazi] = useState(qYazi0);
   const [qYazar, setQYazar] = useState(qYazar0);
 
-  const [counters, setCounters] = useState<Counters>({
+  const [counters, setCounters] = useState({
     dergi: 0,
     sayi: 0,
     yazi: 0,
@@ -113,35 +92,39 @@ export default function SearchParamsAramaWrapper() {
     yazi: true,
     yazar: true,
   });
-  const [results, setResults] = useState<ResultItem[]>([]);
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 24;
 
+  const API = apiBase();
+
   // sayaçlar
   useEffect(() => {
+    if (!API) return;
     let cancel = false;
     (async () => {
       try {
         const [d, s, y, z] = await Promise.all([
-          fetchJSON<{ total: number }>("/api/dergis?limit=1&page=1"),
-          fetchJSON<{ total: number }>("/api/sayis?limit=1&page=1"),
-          fetchJSON<{ total: number }>("/api/yazis?limit=1&page=1"),
-          fetchJSON<{ total: number }>("/api/yazars?limit=1&page=1"),
+          fetchJSON(`${API}/dergis?limit=1&page=1`),
+          fetchJSON(`${API}/sayis?limit=1&page=1`),
+          fetchJSON(`${API}/yazis?limit=1&page=1`),
+          fetchJSON(`${API}/yazars?limit=1&page=1`),
         ]);
-        if (!cancel)
+        if (!cancel) {
           setCounters({
-            dergi: d.total || 0,
-            sayi: s.total || 0,
-            yazi: y.total || 0,
-            yazar: z.total || 0,
+            dergi: d?.total || 0,
+            sayi: s?.total || 0,
+            yazi: y?.total || 0,
+            yazar: z?.total || 0,
           });
+        }
       } catch {}
     })();
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [API]);
 
   // kapsam
   const effectiveScope = useMemo(() => {
@@ -157,6 +140,8 @@ export default function SearchParamsAramaWrapper() {
 
   // arama
   const doSearch = async (pg = 1) => {
+    if (!API) return;
+
     setLoading(true);
     setPage(pg);
     if (pg === 1) setResults([]);
@@ -168,35 +153,31 @@ export default function SearchParamsAramaWrapper() {
       if (qYil) params.set("yil", qYil);
       if (qYazi) params.set("yazi", qYazi);
       if (qYazar) params.set("yazar", qYazar);
-      router.replace(`${pathname}?${params.toString()}` as any, { scroll: false });
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
 
-      const promises: Promise<ResultItem[]>[] = [];
+      const promises = [];
       const totals = { dergi: 0, sayi: 0, yazi: 0, yazar: 0 };
 
       // Dergi
       if (effectiveScope.dergi) {
-        const url = `/api/dergis?search=${encodeURIComponent(
-          qDergi || qGeneral
-        )}&limit=${limit}&page=${pg}`;
+        const url = `${API}/dergis?search=${encodeURIComponent(qDergi || qGeneral)}&limit=${limit}&page=${pg}`;
         promises.push(
-          fetchJSON<{ data: Dergi[]; total: number }>(url)
+          fetchJSON(url)
             .then((j) => {
               totals.dergi = j?.total ?? 0;
-              return (j?.data || []).map(
-                (d) => ({ kind: "dergi", data: d } as ResultItem)
-              );
+              return (j?.data || []).map((d) => ({ kind: "dergi", data: d }));
             })
-            .catch(() => [] as ResultItem[])
+            .catch(() => [])
         );
       }
 
       // Sayı
       if (effectiveScope.sayi) {
-        let dergiIds: number[] = [];
+        let dergiIds = [];
         if (qDergi) {
-          const j = await fetchJSON<{ data: Dergi[]; total: number }>(
-            `/api/dergis?search=${encodeURIComponent(qDergi)}&limit=200&page=1`
-          ).catch(() => ({ data: [] as Dergi[], total: 0 }));
+          const j = await fetchJSON(
+            `${API}/dergis?search=${encodeURIComponent(qDergi)}&limit=200&page=1`
+          ).catch(() => ({ data: [], total: 0 }));
           dergiIds = (j?.data || []).map((x) => x.id);
         }
 
@@ -205,55 +186,39 @@ export default function SearchParamsAramaWrapper() {
         if (qYil) query.set("yil", qYil);
         query.set("limit", String(limit));
         query.set("page", String(pg));
-        const base = `/api/sayis?${query.toString()}`;
+        const base = `${API}/sayis?${query.toString()}`;
 
         if (dergiIds.length === 0) {
-          const resp = await fetchJSON<{ data: Sayi[]; total: number }>(base).catch(
-            () => ({ data: [] as Sayi[], total: 0 })
-          );
-          totals.sayi = resp.total ?? 0;
-          promises.push(
-            Promise.resolve(
-              (resp.data || []).map(
-                (s) => ({ kind: "sayi", data: s } as ResultItem)
-              )
-            )
-          );
+          const resp = await fetchJSON(base).catch(() => ({ data: [], total: 0 }));
+          totals.sayi = resp?.total ?? 0;
+          promises.push(Promise.resolve((resp?.data || []).map((s) => ({ kind: "sayi", data: s }))));
         } else {
-          const totalFirst = await fetchJSON<{ data: Sayi[]; total: number }>(
-            `${base}&dergi_id=${dergiIds[0]}`
-          ).catch(() => ({ data: [] as Sayi[], total: 0 }));
-          totals.sayi = totalFirst.total ?? 0;
+          const totalFirst = await fetchJSON(`${base}&dergi_id=${dergiIds[0]}`).catch(() => ({
+            data: [],
+            total: 0,
+          }));
+          totals.sayi = totalFirst?.total ?? 0;
 
           const group = await Promise.all(
             dergiIds.slice(0, 8).map(async (id) => {
-              const u = `${base}&dergi_id=${id}`;
-              const j = await fetchJSON<{ data: Sayi[] }>(u).catch(() => ({
-                data: [] as Sayi[],
-              }));
-              return (j?.data || []).map(
-                (s) => ({ kind: "sayi", data: s } as ResultItem)
-              );
+              const j = await fetchJSON(`${base}&dergi_id=${id}`).catch(() => ({ data: [] }));
+              return (j?.data || []).map((s) => ({ kind: "sayi", data: s }));
             })
           );
-          promises.push(Promise.resolve(group.flat() as ResultItem[]));
+          promises.push(Promise.resolve(group.flat()));
         }
       }
 
       // Yazar
       if (effectiveScope.yazar) {
-        const url = `/api/yazars?search=${encodeURIComponent(
-          qYazar || qGeneral
-        )}&limit=${limit}&page=${pg}`;
+        const url = `${API}/yazars?search=${encodeURIComponent(qYazar || qGeneral)}&limit=${limit}&page=${pg}`;
         promises.push(
-          fetchJSON<{ data: Yazar[]; total: number }>(url)
+          fetchJSON(url)
             .then((j) => {
               totals.yazar = j?.total ?? 0;
-              return (j?.data || []).map(
-                (y) => ({ kind: "yazar", data: y } as ResultItem)
-              );
+              return (j?.data || []).map((y) => ({ kind: "yazar", data: y }));
             })
-            .catch(() => [] as ResultItem[])
+            .catch(() => [])
         );
       }
 
@@ -262,19 +227,23 @@ export default function SearchParamsAramaWrapper() {
         const query = new URLSearchParams();
         const baslik = qYazi || qGeneral;
         if (baslik) query.set("search", baslik);
-        if (qYil) query.set("yil", qYil);
+
+        // ✅ Laravel yazis endpointinde yil filtresi yoktu (senin attığın koda göre)
+        // O yüzden burada yıl'ı filtre olarak yazis'e göndermiyoruz.
+        // Eğer backend'e yil filtresi eklediysen, bu satırı aç:
+        // if (qYil) query.set("yil", qYil);
 
         if (qDergi) {
-          const j = await fetchJSON<{ data: Dergi[] }>(
-            `/api/dergis?search=${encodeURIComponent(qDergi)}&limit=50&page=1`
-          ).catch(() => ({ data: [] as Dergi[] }));
+          const j = await fetchJSON(`${API}/dergis?search=${encodeURIComponent(qDergi)}&limit=50&page=1`).catch(
+            () => ({ data: [] })
+          );
           const ids = (j?.data || []).map((x) => x.id);
           if (ids.length) query.set("dergi_id", String(ids[0]));
         }
         if (qYazar) {
-          const j = await fetchJSON<{ data: Yazar[] }>(
-            `/api/yazars?search=${encodeURIComponent(qYazar)}&limit=50&page=1`
-          ).catch(() => ({ data: [] as Yazar[] }));
+          const j = await fetchJSON(`${API}/yazars?search=${encodeURIComponent(qYazar)}&limit=50&page=1`).catch(
+            () => ({ data: [] })
+          );
           const ids = (j?.data || []).map((x) => x.id);
           if (ids.length) query.set("yazar_id", String(ids[0]));
         }
@@ -282,40 +251,27 @@ export default function SearchParamsAramaWrapper() {
         query.set("limit", String(limit));
         query.set("page", String(pg));
 
-        const url = `/api/yazis?${query.toString()}`;
-        const resp = await fetchJSON<{ data: YaziRow[]; total: number }>(url).catch(
-          () => ({ data: [] as YaziRow[], total: 0 })
-        );
+        const url = `${API}/yazis?${query.toString()}`;
+        const resp = await fetchJSON(url).catch(() => ({ data: [], total: 0 }));
+        totals.yazi = resp?.total ?? 0;
 
-        totals.yazi = resp.total ?? 0;
-
-        const items: ResultItem[] = (resp.data || []).map((r) => ({
-          kind: "yazi",
-          data: r,
-        }));
-        promises.push(Promise.resolve(items));
+        promises.push(Promise.resolve((resp?.data || []).map((r) => ({ kind: "yazi", data: r }))));
       }
 
       // topla + sayılara dergi adı iliştir
       const chunks = await Promise.all(promises);
       const flat = chunks.flat();
 
-      const sayiNeed = flat.filter(
-        (x): x is Extract<ResultItem, { kind: "sayi" }> => x.kind === "sayi"
-      );
+      const sayiNeed = flat.filter((x) => x.kind === "sayi");
       if (sayiNeed.length) {
-        const dergiIds = Array.from(
-          new Set(sayiNeed.map((s) => s.data.dergi_id))
-        ).slice(0, 50);
+        const dergiIds = Array.from(new Set(sayiNeed.map((s) => s.data.dergi_id))).slice(0, 50);
         const pairs = await Promise.all(
           dergiIds.map(async (id) => {
-            const j = await fetchJSON<Dergi>(`/api/dergis/${id}`).catch(
-              () => null as any
-            );
-            return [id, j?.isim ?? null] as const;
+            const j = await fetchJSON(`${API}/dergis/${id}`).catch(() => null);
+            return [id, j?.isim ?? null];
           })
         );
-        const map = new Map<number, string | null>(pairs);
+        const map = new Map(pairs);
         for (const it of sayiNeed) it.data.dergi_isim = map.get(it.data.dergi_id) ?? null;
       }
 
@@ -335,7 +291,8 @@ export default function SearchParamsAramaWrapper() {
       didAutoload.current = true;
       doSearch(1);
     }
-  }, []); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API]);
 
   const canLoadMore =
     (effectiveScope.dergi && facetTotals.dergi > page * limit) ||
@@ -399,7 +356,7 @@ export default function SearchParamsAramaWrapper() {
             </button>
             {expandedFilters && (
               <div className="px-4 pb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                {(["dergi", "sayi", "yazi", "yazar"] as const).map((k) => (
+                {["dergi", "sayi", "yazi", "yazar"].map((k) => (
                   <label key={k} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -450,7 +407,7 @@ export default function SearchParamsAramaWrapper() {
               ))
             : results.length === 0
             ? <div className="col-span-full text-white/60">Sonuç bulunamadı.</div>
-            : results.map((r) => <ResultCard key={`${r.kind}-${(r as any).data.id}`} item={r} />)}
+            : results.map((r) => <ResultCard key={`${r.kind}-${r.data.id}`} item={r} />)}
         </div>
 
         {canLoadMore && (
@@ -469,9 +426,7 @@ export default function SearchParamsAramaWrapper() {
 }
 
 /* ====================== Bileşenler ====================== */
-function StatBox({
-  icon, label, value,
-}: { icon: React.ReactNode; label: string; value: number | string; }) {
+function StatBox({ icon, label, value }) {
   return (
     <div className="rounded-2xl border border-[#333] bg-[#0f0f0f] px-4 py-3">
       <div className="flex items-center gap-3">
@@ -487,14 +442,7 @@ function StatBox({
   );
 }
 
-function Input({
-  value, onChange, placeholder, inputMode,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-}) {
+function Input({ value, onChange, placeholder, inputMode }) {
   return (
     <input
       value={value}
@@ -506,7 +454,7 @@ function Input({
   );
 }
 
-function ResultCard({ item }: { item: ResultItem }) {
+function ResultCard({ item }) {
   const k = item.kind;
 
   if (k === "dergi") {
@@ -544,7 +492,7 @@ function ResultCard({ item }: { item: ResultItem }) {
           </span>
         </div>
         <div className="font-semibold text-[#ffc451] line-clamp-1">
-          {(s as any).dergi_isim || "Dergi"} {extractNo(s.sayi_num)}. Sayı
+          {s.dergi_isim || "Dergi"} {extractNo(s.sayi_num)}. Sayı
         </div>
         <div className="text-sm text-white/70 mt-1 flex items-center gap-2">
           <Calendar className="w-3.5 h-3.5 text-[#ffc451]" />
@@ -555,7 +503,7 @@ function ResultCard({ item }: { item: ResultItem }) {
   }
 
   if (k === "yazi") {
-    const y = item.data as YaziRow;
+    const y = item.data;
     return (
       <a
         href={y.sayi_id ? `/sayi?id=${y.sayi_id}` : "#"}
@@ -587,7 +535,7 @@ function ResultCard({ item }: { item: ResultItem }) {
     );
   }
 
-  const a = item.data as Yazar;
+  const a = item.data;
   return (
     <a
       href={`/sayfalar/yazar-detay?id=${a.id}`}
@@ -607,7 +555,7 @@ function ResultCard({ item }: { item: ResultItem }) {
   );
 }
 
-function extractNo(sayi_num: string | null | undefined) {
+function extractNo(sayi_num) {
   const m = String(sayi_num || "").match(/\d+/);
   return m ? parseInt(m[0], 10) : 1;
 }

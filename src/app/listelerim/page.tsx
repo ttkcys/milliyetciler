@@ -31,7 +31,9 @@ type Magazine = {
 function parseIdList(s: string | null | undefined): number[] {
     try {
         const arr = JSON.parse(s || "[]");
-        return Array.isArray(arr) ? arr.map((x: any) => Number(x)).filter(Number.isFinite) : [];
+        return Array.isArray(arr)
+            ? arr.map((x: any) => Number(x)).filter(Number.isFinite)
+            : [];
     } catch {
         return [];
     }
@@ -45,7 +47,14 @@ function normImg(src?: string | null, folder = "") {
     return `/${clean}`;
 }
 
-/* ===================================================== */
+function normalizePublicPath(p?: string | null) {
+    if (!p) return null;
+    let s = String(p).trim();
+    s = s.replace(/^https?:\/\/[^/]+\/+/, ""); // domain at
+    s = s.replace(/^\/+/, ""); // baştaki /
+    s = s.replace(/^public\/+/, ""); // public/
+    return "/" + s.split("/").map(encodeURIComponent).join("/");
+}
 
 export default function ListsPage() {
     const router = useRouter();
@@ -59,19 +68,31 @@ export default function ListsPage() {
     const [loadingAuthors, setLoadingAuthors] = useState(false);
     const [loadingMags, setLoadingMags] = useState(false);
 
+    const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+
     // me’yi çek
     useEffect(() => {
         (async () => {
+            if (!API_BASE) {
+                setLoadingMe(false);
+                console.error("NEXT_PUBLIC_API_BASE tanımlı değil");
+                return;
+            }
+
             try {
                 setLoadingMe(true);
-                const res = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+                const res = await fetch(`${API_BASE}/me`, {
+                    cache: "no-store",
+                    credentials: "include",
+                });
+
                 if (res.status === 401) {
-                    const nextPath = "/giris-yap?next=/listelerim" as const;
-                    // @ts-expect-error: Type mismatch for dynamic route
-                    router.replace(nextPath);
+                    router.replace("/giris-yap?next=/listelerim" as any);
+
                     return;
                 }
                 if (!res.ok) throw new Error("Kullanıcı getirilemedi");
+
                 const u = (await res.json()) as Me;
                 setMe(u);
             } catch (e) {
@@ -80,24 +101,30 @@ export default function ListsPage() {
                 setLoadingMe(false);
             }
         })();
-    }, [router]);
+    }, [router, API_BASE]);
 
     const authorIds = useMemo(() => parseIdList(me?.lYazar), [me]);
     const magIds = useMemo(() => parseIdList(me?.lDergi), [me]);
 
     // Yazar detaylarını çek
     useEffect(() => {
+        if (!API_BASE) return;
+
         if (!authorIds.length) {
             setAuthors([]);
             return;
         }
         let cancel = false;
+
         (async () => {
             try {
                 setLoadingAuthors(true);
                 const rows = await Promise.all(
                     authorIds.map(async (id) => {
-                        const r = await fetch(`/api/yazars/${id}`, { cache: "no-store" });
+                        const r = await fetch(`${API_BASE}/yazars/${id}`, {
+                            cache: "no-store",
+                            credentials: "include",
+                        });
                         if (!r.ok) return null;
                         return (await r.json()) as Author;
                     })
@@ -107,24 +134,31 @@ export default function ListsPage() {
                 if (!cancel) setLoadingAuthors(false);
             }
         })();
+
         return () => {
             cancel = true;
         };
-    }, [authorIds]);
+    }, [authorIds, API_BASE]);
 
     // Dergi detaylarını çek
     useEffect(() => {
+        if (!API_BASE) return;
+
         if (!magIds.length) {
             setMags([]);
             return;
         }
         let cancel = false;
+
         (async () => {
             try {
                 setLoadingMags(true);
                 const rows = await Promise.all(
                     magIds.map(async (id) => {
-                        const r = await fetch(`/api/dergis/${id}`, { cache: "no-store" });
+                        const r = await fetch(`${API_BASE}/dergis/${id}`, {
+                            cache: "no-store",
+                            credentials: "include",
+                        });
                         if (!r.ok) return null;
                         return (await r.json()) as Magazine;
                     })
@@ -134,53 +168,59 @@ export default function ListsPage() {
                 if (!cancel) setLoadingMags(false);
             }
         })();
+
         return () => {
             cancel = true;
         };
-    }, [magIds]);
+    }, [magIds, API_BASE]);
 
     async function removeFromList(kind: "author" | "dergi", id: number) {
+        if (!API_BASE) {
+            alert("API adresi tanımlı değil (NEXT_PUBLIC_API_BASE).");
+            return;
+        }
+
         // optimistik güncelle
         if (kind === "author") setAuthors((s) => s.filter((a) => a.id !== id));
         else setMags((s) => s.filter((m) => m.id !== id));
 
-        const res = await fetch("/api/list", {
+        const res = await fetch(`${API_BASE}/list`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
             body: JSON.stringify({ kind, id }),
+            cache: "no-store",
         });
 
         if (!res.ok) {
-            // geri al
-            if (kind === "author") {
-                const r = await fetch(`/api/yazars/${id}`, { cache: "no-store" });
-                if (r.ok) {
-                    const data = (await r.json()) as Author;
-                    setAuthors((s) => [...s, data]);
+            // geri al (en azından tekrar çekmeye çalış)
+            try {
+                if (kind === "author") {
+                    const r = await fetch(`${API_BASE}/yazars/${id}`, {
+                        cache: "no-store",
+                        credentials: "include",
+                    });
+                    if (r.ok) {
+                        const data = (await r.json()) as Author;
+                        setAuthors((s) => [...s, data]);
+                    }
+                } else {
+                    const r = await fetch(`${API_BASE}/dergis/${id}`, {
+                        cache: "no-store",
+                        credentials: "include",
+                    });
+                    if (r.ok) {
+                        const data = (await r.json()) as Magazine;
+                        setMags((s) => [...s, data]);
+                    }
                 }
-            } else {
-                const r = await fetch(`/api/dergis/${id}`, { cache: "no-store" });
-                if (r.ok) {
-                    const data = (await r.json()) as Magazine;
-                    setMags((s) => [...s, data]);
-                }
-            }
+            } catch { }
             alert("Kaldırma işlemi başarısız oldu.");
         }
     }
 
     function placeholderCover() {
         return "/logo/logo_color.svg";
-    }
-
-    function normalizePublicPath(p?: string | null) {
-        if (!p) return null;
-        let s = String(p).trim();
-        s = s.replace(/^https?:\/\/[^/]+\/+/, ""); // domain at
-        s = s.replace(/^\/+/, ""); // baştaki /'ları at
-        s = s.replace(/^public\/+/, ""); // public/ önekini at
-        return "/" + s.split("/").map(encodeURIComponent).join("/");
     }
 
     // API image varsa onu kullan; yoksa isimden pdfImage yolu üret
@@ -202,7 +242,9 @@ export default function ListsPage() {
                         </div>
                         <div>
                             <h1 className="text-4xl md:text-5xl font-bold">Listelerim</h1>
-                            <p className="text-white/60 mt-1">Kaydettiğiniz yazarlar ve dergiler burada.</p>
+                            <p className="text-white/60 mt-1">
+                                Kaydettiğiniz yazarlar ve dergiler burada.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -212,7 +254,9 @@ export default function ListsPage() {
             <div className="mx-auto max-w-7xl px-6 pt-8">
                 <div className="inline-flex rounded-xl border border-[#333] p-1 bg-[#141414]">
                     <button
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition ${tab === "yazar" ? "bg-[#1b1b1b] text-white" : "text-white/70 hover:text-white"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition ${tab === "yazar"
+                            ? "bg-[#1b1b1b] text-white"
+                            : "text-white/70 hover:text-white"
                             }`}
                         onClick={() => setTab("yazar")}
                     >
@@ -220,8 +264,11 @@ export default function ListsPage() {
                         Yazarlar
                         <span className="ml-1 text-white/50">({authorIds.length})</span>
                     </button>
+
                     <button
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition ${tab === "dergi" ? "bg-[#1b1b1b] text-white" : "text-white/70 hover:text-white"
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition ${tab === "dergi"
+                            ? "bg-[#1b1b1b] text-white"
+                            : "text-white/70 hover:text-white"
                             }`}
                         onClick={() => setTab("dergi")}
                     >
@@ -258,7 +305,7 @@ export default function ListsPage() {
                                             <img
                                                 src={normImg(a.image, "yazarlar")}
                                                 alt={a.isim}
-                                                className="h-100 md:h-120  w-full object-cover"
+                                                className="h-100 md:h-120 w-full object-cover"
                                             />
                                             <div className="p-5">
                                                 <div className="font-semibold line-clamp-1">{a.isim}</div>

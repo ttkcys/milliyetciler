@@ -1,7 +1,17 @@
 "use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { BookOpen, Calendar, FileText, MapPin, Quote, User, LogIn, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  FileText,
+  MapPin,
+  Quote,
+  User,
+  LogIn,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 /* ------------ Tipler ------------ */
 type Dergi = {
@@ -41,6 +51,10 @@ type SayiListResponse = { page: number; limit: number; total: number; data: Sayi
 const REDIRECT_DELAY_MS = 1500;
 
 /* ------------ Yardımcılar ------------ */
+function apiBase() {
+  return String(process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+}
+
 function yearPart(s?: string | null) {
   if (!s) return null;
   const m = s.match(/\d{4}/);
@@ -55,7 +69,8 @@ function formatDonem(c?: string | null, b?: string | null) {
   return `${cy} - ${by}`;
 }
 function coverFromPdfImage(isim: string, index = 1) {
-  return `/pdfImage/${isim}/${isim}_${index}.jpg`;
+  const enc = encodeURIComponent((isim || "").trim());
+  return `/pdfImage/${enc}/${enc}_${index}.jpg`;
 }
 function placeholderCover() {
   return `/logo/logo_color.svg`;
@@ -78,20 +93,15 @@ function pdfPathToImage(pdf?: string | null) {
   s = s.replace(/(_compressed)?\.(pdf|PDF)$/, ".jpg");
   return "/" + s.split("/").map(encodeURIComponent).join("/");
 }
+function extractIssueNo(sayi_num: string): number {
+  const m = String(sayi_num || "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : 1;
+}
 function coverFromPdfImageRaw(isim: string, no: number) {
   const name = (isim || "").trim();
   const enc = encodeURIComponent(name);
   const encNo = Number(no) || 1;
   return `/pdfImage/${enc}/${enc}_${encNo}.jpg`;
-}
-function encodePathSegments(p?: string | null) {
-  if (!p) return null;
-  const trimmed = p.replace(/^https?:\/\/[^/]+\/+/, "").replace(/^\/+/, "");
-  return "/" + trimmed.split("/").map(encodeURIComponent).join("/");
-}
-function extractIssueNo(sayi_num: string): number {
-  const m = String(sayi_num || "").match(/\d+/);
-  return m ? parseInt(m[0], 10) : 1;
 }
 function issueCover(dergiIsim: string | undefined, sayi: Sayi) {
   const rawImg = (sayi.image || "").replace(/^https?:\/\/[^/]+\/+/, "");
@@ -118,6 +128,7 @@ type ToastState = {
   href?: string;
   remainingMs?: number;
 };
+
 function Toast({
   state,
   onClose,
@@ -132,9 +143,8 @@ function Toast({
   const pct = Math.max(0, Math.min(100, (remain / total) * 100));
   return (
     <div
-      className={`fixed bottom-6 right-6 z-[60] transition-all duration-300 ${
-        state.show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
-      }`}
+      className={`fixed bottom-6 right-6 z-[60] transition-all duration-300 ${state.show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
+        }`}
       aria-live="assertive"
     >
       <div className="w-[360px] max-w-[92vw] overflow-hidden rounded-2xl border border-[#353535] bg-[#111] shadow-2xl">
@@ -187,6 +197,9 @@ function Toast({
 export default function SearchParamsWrapper() {
   const sp = useSearchParams();
   const router = useRouter();
+
+  const API = apiBase();
+
   const idParam = sp.get("id");
   const dergiId = idParam ? Number(idParam) : NaN;
 
@@ -210,14 +223,17 @@ export default function SearchParamsWrapper() {
 
   useEffect(() => {
     if (!toast.show) return;
+
     if (toast.href) {
       setToast((s) => ({ ...s, remainingMs: REDIRECT_DELAY_MS }));
       const startedAt = Date.now();
+
       intervalRef.current = window.setInterval(() => {
         const elapsed = Date.now() - startedAt;
         const remain = Math.max(0, REDIRECT_DELAY_MS - elapsed);
         setToast((s) => ({ ...s, remainingMs: remain }));
       }, 100);
+
       const target = toast.href;
       timeoutRef.current = window.setTimeout(() => {
         window.location.assign(target);
@@ -225,6 +241,7 @@ export default function SearchParamsWrapper() {
     } else {
       timeoutRef.current = window.setTimeout(() => setToast({ show: false }), 1500);
     }
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -235,7 +252,7 @@ export default function SearchParamsWrapper() {
 
   const showLoginRedirect = (id: number) => {
     const next = encodeURIComponent(`/dergi?id=${id}`);
-    const href = `/giris-yap?next=${next}` as any;
+    const href = `/giris-yap?next=${next}`;
     setToast({
       show: true,
       title: "Oturum gerekli",
@@ -248,12 +265,17 @@ export default function SearchParamsWrapper() {
   // Dergi verisi
   useEffect(() => {
     if (!dergiId) return;
+    if (!API) {
+      setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(`/api/dergis/${dergiId}`, { cache: "no-store" });
+        const res = await fetch(`${API}/dergis/${dergiId}`, { cache: "no-store", credentials: "include" });
         if (!res.ok) throw new Error(`Dergi bulunamadı (${res.status})`);
         const json = (await res.json()) as Dergi;
         if (!cancelled) setRow(json);
@@ -263,16 +285,19 @@ export default function SearchParamsWrapper() {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [dergiId]);
+  }, [dergiId, API]);
 
   const donem = useMemo(() => formatDonem(row?.cikis, row?.bitis), [row]);
 
   // Sayılar
   useEffect(() => {
     if (!dergiId) return;
+    if (!API) return;
+
     let cancel = false;
     (async () => {
       setLoadingSayilar(true);
@@ -282,8 +307,10 @@ export default function SearchParamsWrapper() {
         params.set("dergi_id", String(dergiId));
         params.set("page", String(page));
         params.set("limit", String(limit));
-        const res = await fetch(`/api/sayis?${params.toString()}`, { cache: "no-store" });
+
+        const res = await fetch(`${API}/sayis?${params.toString()}`, { cache: "no-store", credentials: "include" });
         if (!res.ok) throw new Error(`Sayılar alınamadı (${res.status})`);
+
         const json: SayiListResponse = await res.json();
         if (!cancel) {
           setSayilar(json.data || []);
@@ -295,16 +322,24 @@ export default function SearchParamsWrapper() {
         if (!cancel) setLoadingSayilar(false);
       }
     })();
+
     return () => {
       cancel = true;
     };
-  }, [dergiId, page, limit]);
+  }, [dergiId, page, limit, API]);
 
   const handleAdd = async () => {
     if (!dergiId) return;
+    if (!API) {
+      setToast({ show: true, title: "API yok", message: "NEXT_PUBLIC_API_BASE ayarlı değil." });
+      return;
+    }
+
     try {
       setAdding(true);
-      const meRes = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+
+      // oturum kontrol
+      const meRes = await fetch(`${API}/me`, { cache: "no-store", credentials: "include" });
       if (meRes.status === 401 || meRes.status === 403) {
         showLoginRedirect(dergiId);
         return;
@@ -313,12 +348,16 @@ export default function SearchParamsWrapper() {
         setToast({ show: true, title: "Oturum doğrulanamadı", message: "Lütfen tekrar deneyin." });
         return;
       }
-      const resp = await fetch("/api/list", {
+
+      // listeye ekle
+      const resp = await fetch(`${API}/list`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ kind: "dergi", id: dergiId }),
+        cache: "no-store",
       });
+
       if (resp.status === 401 || resp.status === 403) {
         showLoginRedirect(dergiId);
         return;
@@ -332,6 +371,7 @@ export default function SearchParamsWrapper() {
         setToast({ show: true, title: "Hata", message: `Eklenemedi (${resp.status})` });
         return;
       }
+
       setAdded(true);
       setToast({ show: true, title: "Eklendi", message: "Dergi listenize eklendi." });
     } finally {
@@ -356,15 +396,19 @@ export default function SearchParamsWrapper() {
       <Toast
         state={toast}
         onClose={() => setToast({ show: false })}
-        onAction={toast.href ? () => router.push(toast.href! as any) : undefined}
+        onAction={toast.href ? () => router.push(toast.href as any) : undefined}
       />
 
       {/* Üst Başlık */}
       <div className="border-b border-[#333] py-4">
         <div className="mx-auto max-w-6xl px-4 text-sm">
-          <a href="/" className="text-white/60 hover:text-[#ffc451]">Anasayfa</a>
+          <a href="/" className="text-white/60 hover:text-[#ffc451]">
+            Anasayfa
+          </a>
           <span className="text-white/40 mx-1.5">›</span>
-          <a href="/sayfalar/dergiler" className="text-white/60 hover:text-[#ffc451]">Dergiler</a>
+          <a href="/sayfalar/dergiler" className="text-white/60 hover:text-[#ffc451]">
+            Dergiler
+          </a>
           <span className="text-white/40 mx-1.5">›</span>
           <span className="text-[#ffc451]">{row?.isim || "Dergi"}</span>
         </div>
@@ -404,23 +448,27 @@ export default function SearchParamsWrapper() {
         <div className="flex-1 space-y-5">
           <h1 className="text-3xl font-bold">{row?.isim || "—"}</h1>
           {row?.alt_baslik ? <div className="text-white/70">{row.alt_baslik}</div> : null}
+
           <div className="flex flex-wrap items-center gap-4 text-white/80">
             <span className="inline-flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#ffc451]" />
               {donem}
             </span>
+
             {row?.basim_yeri ? (
               <span className="inline-flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-[#ffc451]" />
                 {row.basim_yeri}
               </span>
             ) : null}
+
             {row?.toplam_sayi != null ? (
               <span className="inline-flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#ffc451]" />
                 {row.toplam_sayi} sayı
               </span>
             ) : null}
+
             {row?.telif ? (
               <span className="inline-flex items-center gap-2">
                 <User className="w-4 h-4 text-[#ffc451]" />
@@ -478,7 +526,6 @@ export default function SearchParamsWrapper() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {sayilar.map((s) => {
                 const img = issueCover(row?.isim, s);
-                const pdf = normalizePublicPath(s.pdf) || pdfPathToImage(s.pdf) || undefined;
                 return (
                   <div
                     key={s.id}
@@ -499,7 +546,8 @@ export default function SearchParamsWrapper() {
                         <div className="font-semibold line-clamp-1">{s.sayi_num}</div>
                         {s.yil ? (
                           <div className="text-xs text-white/60">
-                            {s.ay ? `${s.ay} ` : ""}{s.yil}
+                            {s.ay ? `${s.ay} ` : ""}
+                            {s.yil}
                           </div>
                         ) : null}
                       </div>
@@ -511,7 +559,8 @@ export default function SearchParamsWrapper() {
                       <div className="flex items-center gap-2 pt-1">
                         <a
                           href={`/sayfalar/dergi-sayi?id=${s.id}`}
-                          className="flex-1 text-center rounded-lg border border-[#333] px-3 py-2 text-sm hover:border-[#ffc451]">
+                          className="flex-1 text-center rounded-lg border border-[#333] px-3 py-2 text-sm hover:border-[#ffc451]"
+                        >
                           İncele
                         </a>
                       </div>
@@ -524,20 +573,22 @@ export default function SearchParamsWrapper() {
             {/* Sayfalama */}
             <div className="mt-6 flex items-center justify-between">
               <div className="text-sm text-white/70">
-                Toplam {total} sayı — Sayfa {page}/{Math.max(1, Math.ceil(total / limit))}
+                Toplam {total} sayı — Sayfa {page}/{totalPages}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white/80 disabled:opacity-40 hover:border-[#ffc451]">
+                  className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white/80 disabled:opacity-40 hover:border-[#ffc451]"
+                >
                   <ChevronLeft className="h-4 w-4" />
                   Geri
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(Math.max(1, Math.ceil(total / limit)), p + 1))}
-                  disabled={page >= Math.max(1, Math.ceil(total / limit))}
-                  className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white/80 disabled:opacity-40 hover:border-[#ffc451]">
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white/80 disabled:opacity-40 hover:border-[#ffc451]"
+                >
                   İleri
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -550,7 +601,9 @@ export default function SearchParamsWrapper() {
                   className="rounded-lg border border-[#333] bg-[#141414] px-2 py-1 text-sm"
                 >
                   {[8, 12, 16, 20, 28, 36].map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
                 </select>
               </div>

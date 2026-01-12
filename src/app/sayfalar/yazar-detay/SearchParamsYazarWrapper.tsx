@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Calendar, BookOpen, FileText, LogIn, BadgeInfo } from "lucide-react";
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000/api").replace(/\/+$/, "");
+const apiUrl = (path: string) => `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+const ASSET_BASE = (process.env.NEXT_PUBLIC_ASSET_BASE || "").replace(/\/+$/, "");
+
 /* ===================== Types ===================== */
 type Author = {
   id: number;
@@ -40,12 +44,18 @@ const REDIRECT_DELAY_MS = 1500;
 
 /* ===================== Utils ===================== */
 function normalizeAuthorImage(src?: string | null) {
-  if (!src) return "/yazarlar/placeholder-author.png";
+  const fallback = "/yazarlar/placeholder-author.png";
+  if (!src) return fallback;
+
   if (/^https?:\/\//i.test(src)) return src;
-  let clean = src.trim().replace(/^\/+/, "");
-  if (!clean.startsWith("yazarlar/")) clean = `yazarlar/${clean}`;
-  return `/${clean}`;
+
+  const clean = src.trim().replace(/^\/+/, "");
+  if (ASSET_BASE) return `${ASSET_BASE}/storage/${clean}`;
+
+  return `/storage/${clean}`;
 }
+
+
 function yearPart(s?: string | null) {
   if (!s) return null;
   const m = s.match(/\d{4}/);
@@ -114,9 +124,8 @@ function Toast({
   const pct = Math.max(0, Math.min(100, (remain / total) * 100));
   return (
     <div
-      className={`fixed bottom-6 right-6 z-[60] transition-all duration-300 ${
-        state.show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
-      }`}
+      className={`fixed bottom-6 right-6 z-[60] transition-all duration-300 ${state.show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
+        }`}
       aria-live="assertive"
     >
       <div className="w-[360px] max-w-[92vw] overflow-hidden rounded-2xl border border-[#353535] bg-[#111] shadow-2xl">
@@ -234,7 +243,8 @@ export default function SearchParamsYazarWrapper() {
       setLoadingAuthor(true);
       setErrAuthor(null);
       try {
-        const res = await fetch(`/api/yazars/${yazarId}`, { cache: "no-store" });
+        const res = await fetch(apiUrl(`/yazars/${yazarId}`), { cache: "no-store" });
+
         if (!res.ok) throw new Error(`Yazar bulunamadı (${res.status})`);
         const row = (await res.json()) as Author;
         if (cancelled) return;
@@ -250,7 +260,8 @@ export default function SearchParamsYazarWrapper() {
         await Promise.all(
           ids.map(async (cid) => {
             try {
-              const cr = await fetch(`/api/yazars/${cid}`, { cache: "no-store" });
+              const cr = await fetch(apiUrl(`/yazars/${cid}`), { cache: "no-store" });
+
               if (cr.ok) {
                 const cjson = await cr.json();
                 idToName[cid] = cjson?.isim || `#${cid}`;
@@ -279,7 +290,8 @@ export default function SearchParamsYazarWrapper() {
     params.set("page", "1");
     params.set("limit", String(MAX_FETCH_LIMIT));
     params.set("sort", "recent");
-    const res = await fetch(`/api/yazis?${params.toString()}`, { cache: "no-store" });
+    const res = await fetch(apiUrl(`/yazis?${params.toString()}`), { cache: "no-store" });
+
     if (!res.ok) throw new Error(`Yazılar alınamadı (${res.status})`);
     const json: WorksResponse = await res.json();
     return json.data || [];
@@ -340,14 +352,15 @@ export default function SearchParamsYazarWrapper() {
     if (!yazarId) return;
     try {
       setAdding(true);
-      const meRes = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+      const meRes = await fetch(apiUrl("/me"), { cache: "no-store", credentials: "include" });
+
       if (meRes.status === 401 || meRes.status === 403) { showLoginRedirect(yazarId); return; }
       if (!meRes.ok) {
         setToast({ show: true, title: "Oturum doğrulanamadı", message: "Lütfen tekrar deneyin." });
         setTimeout(() => setToast({ show: false }), 1500);
         return;
       }
-      const resp = await fetch("/api/list", {
+      const resp = await fetch(apiUrl("/list"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -503,7 +516,8 @@ export default function SearchParamsYazarWrapper() {
               {pagedWorks.map((w) => (
                 <a
                   key={`${w._sourceAuthorId}-${w.id}`}
-                  href={w.sayi_id ? `/sayi?id=${w.sayi_id}` : "#"}
+                  href={`/sayfalar/yazilar/yazi-detay?id=${w.id}`}
+
                   className="rounded-xl border border-[#333] bg-[#0f0f0f] p-4 hover:border-[#ffc451] transition-all"
                 >
                   <div className="flex items-start gap-3">

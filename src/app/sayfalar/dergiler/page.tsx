@@ -1,41 +1,37 @@
 "use client";
+
 import React, { useEffect, useMemo, useState } from "react";
 import { BookOpen, Calendar, FileText, User, ChevronLeft, ChevronRight } from "lucide-react";
 
-/** ---- API tipleri ---- */
-type DergiDTO = {
-  id: number;
-  isim: string;
-  alt_baslik: string | null;
-  slogan: string | null;
-  aciklama: string | null;
-  imtiyaz: string | null;
-  yazi_mudur: string | null;
-  cikis: string | null;       // YYYY veya YYYY-MM
-  bitis: string | null;       // YYYY veya YYYY-MM
-  basim_yeri: string | null;
-  toplam_sayi: number | null; // toplam sayı
-  eksikler: string | null;
-  telif: string | null;
-  created_at: string;
-  updated_at: string;
-};
+const ASSET_BASE = String(process.env.NEXT_PUBLIC_ASSET_BASE || "").replace(/\/+$/, "");
 
-type ListResponse = {
-  page: number;
-  limit: number;
-  total: number;
-  data: DergiDTO[];
-};
+function assetUrl(path) {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const cleaned = "/" + String(path).replace(/^\/+/, "");
+  const encoded = cleaned.split("/").map(encodeURIComponent).join("/");
+  return ASSET_BASE ? ASSET_BASE + encoded : encoded;
+}
+
+/** Kapaklar: /storage/sayilar/kapaklar/<isim>/<isim>/<isim>_1.jpg */
+function coverFromStorageKapak(isim, index = 1) {
+  const name = (isim || "").trim();
+  return assetUrl(`storage/sayilar/kapaklar/${name}/${name}/${name}_${index}.jpg`);
+}
+
+function placeholderCover() {
+  return assetUrl("logo/logo_color.svg");
+}
 
 /** ---- Yardımcılar ---- */
-function yearPart(s?: string | null) {
+function yearPart(s) {
   if (!s) return null;
-  const m = s.match(/\d{4}/);
+  const m = String(s).match(/\d{4}/);
   return m ? m[0] : null;
 }
 
-function formatDonem(cikis?: string | null, bitis?: string | null) {
+function formatDonem(cikis, bitis) {
   const c = yearPart(cikis);
   const b = yearPart(bitis);
   if (!c && !b) return "—";
@@ -44,32 +40,17 @@ function formatDonem(cikis?: string | null, bitis?: string | null) {
   return `${c} - ${b}`;
 }
 
-function startYearOfDonem(donem: string) {
-  const m = donem.match(/\d{4}/);
+function startYearOfDonem(donem) {
+  const m = String(donem || "").match(/\d{4}/);
   return m ? Number(m[0]) : 0;
 }
 
-/** Kapak: public/pdfImage/<İsim>/<İsim>_1.jpg (URL-encode şart) */
-function coverFromPdfImage(isim: string, index = 1) {
-  const enc = encodeURIComponent(isim);
-  return `/pdfImage/${enc}/${enc}_${index}.jpg`;
-}
-function placeholderCover() {
-  return `/logo/logo_color.svg`;
-}
-
-/** Sıralama seçenekleri */
-type SortKey = "name-asc" | "name-desc" | "year-asc" | "year-desc" | "count-asc" | "count-desc";
-
 /** ---- Kart ---- */
-function MagazineCard({
-  m,
-}: {
-  m: { id: number; name: string; donem: string; img: string; count: number };
-}) {
+function MagazineCard({ m }) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-[#333] bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] transition-all duration-300 hover:border-[#ffc451] hover:shadow-2xl hover:shadow-[#ffc451]/10">
       <div className="absolute inset-0 bg-gradient-to-br from-[#ffc451]/0 to-[#ffc451]/0 group-hover:from-[#ffc451]/5 group-hover:to-transparent transition-all duration-500" />
+
       <div className="relative aspect-[3/4] overflow-hidden bg-[#141414] p-8">
         <div className="absolute inset-0 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,10 +59,11 @@ function MagazineCard({
             alt={m.name}
             className="max-h-full max-w-full object-contain transition-transform duration-500 group-hover:scale-105"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = placeholderCover();
+              e.currentTarget.src = placeholderCover();
             }}
           />
         </div>
+
         <div className="absolute top-4 right-4 flex items-center gap-2 rounded-full bg-[#ffc451]/90 px-3 py-1.5 backdrop-blur-sm">
           <FileText className="h-3.5 w-3.5 text-[#1a1a1a]" />
           <span className="text-xs font-bold text-[#1a1a1a]">{m.count ?? 0} Sayı</span>
@@ -96,8 +78,11 @@ function MagazineCard({
           <Calendar className="h-4 w-4 text-[#ffc451]" />
           <span>{m.donem}</span>
         </div>
-        <a href={`/sayfalar/dergi-detay?id=${m.id}`}
-          className="cursor-pointer w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-medium text-white transition-all duration-300 hover:bg-[#ffc451] hover:text-[#1a1a1a] border border-[#333] group-hover:border-[#ffc451]">
+
+        <a
+          href={`/sayfalar/dergi-detay?id=${m.id}`}
+          className="cursor-pointer w-full mt-4 flex items-center justify-center gap-2 rounded-xl bg-[#1a1a1a] px-4 py-2.5 text-sm font-medium text-white transition-all duration-300 hover:bg-[#ffc451] hover:text-[#1a1a1a] border border-[#333] group-hover:border-[#ffc451]"
+        >
           <BookOpen className="h-4 w-4" />
           <span>İncele</span>
         </a>
@@ -112,15 +97,18 @@ function MagazineCard({
 export default function DergilerPage() {
   // UI state
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState<SortKey>("name-asc");
+  const [sort, setSort] = useState("name-asc");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
 
   // Data state
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [rows, setRows] = useState<DergiDTO[]>([]);
+  const [err, setErr] = useState(null);
+  const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
+
+  // API base
+  const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
   // debounce
   const [qDebounced, setQDebounced] = useState(q);
@@ -132,44 +120,68 @@ export default function DergilerPage() {
   // fetch
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       setLoading(true);
       setErr(null);
+
+      if (!API_BASE) {
+        setErr("API adresi tanımlı değil. NEXT_PUBLIC_API_BASE ayarlayın.");
+        setLoading(false);
+        return;
+      }
+
       try {
         const params = new URLSearchParams();
         params.set("page", String(page));
         params.set("limit", String(limit));
         if (qDebounced.trim()) params.set("search", qDebounced.trim());
 
-        const res = await fetch(`/api/dergis?${params.toString()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Sunucu hatası (${res.status})`);
-        const json: ListResponse = await res.json();
+        const res = await fetch(`${API_BASE}/dergis?${params.toString()}`, {
+          method: "GET",
+          cache: "no-store",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+
+        if (!res.ok) {
+          let msg = `Sunucu hatası (${res.status})`;
+          try {
+            const j = await res.json();
+            if (j?.message) msg = j.message;
+          } catch {}
+          throw new Error(msg);
+        }
+
+        const json = await res.json();
         if (cancelled) return;
-        setRows(json.data || []);
-        setTotal(json.total || 0);
-      } catch (e: any) {
+
+        setRows(json?.data || []);
+        setTotal(json?.total || 0);
+      } catch (e) {
         if (!cancelled) setErr(e?.message || "Bir hata oluştu");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [page, limit, qDebounced]);
+  }, [page, limit, qDebounced, API_BASE]);
 
   // arama değişince sayfa 1
   useEffect(() => setPage(1), [qDebounced]);
 
-  // istemci tarafı mapping + sıralama + filtre
+  // mapping + sorting + filtering
   const items = useMemo(() => {
-    const mapped = rows.map((d) => {
+    const mapped = (rows || []).map((d) => {
       const donem = formatDonem(d.cikis, d.bitis);
       return {
         id: d.id,
         name: d.isim,
         donem,
-        img: coverFromPdfImage(d.isim), // >>> pdfImage/<İsim>/<İsim>_1.jpg
+        img: coverFromStorageKapak(d.isim, 1), // ✅ BURASI DÜZELTİLDİ
         count: Number(d.toplam_sayi || 0),
         _yilStart: startYearOfDonem(donem),
       };
@@ -189,6 +201,8 @@ export default function DergilerPage() {
           return (a.count ?? 0) - (b.count ?? 0);
         case "count-desc":
           return (b.count ?? 0) - (a.count ?? 0);
+        default:
+          return a.name.localeCompare(b.name, "tr-TR");
       }
     });
 
@@ -207,7 +221,9 @@ export default function DergilerPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,196,81,0.1),transparent_50%)]" />
         <div className="relative px-6 py-16 md:py-24">
           <nav className="mb-8 flex items-center gap-2 text-sm">
-            <a href="/" className="text-white/60 hover:text-[#ffc451] transition-colors">Anasayfa</a>
+            <a href="/" className="text-white/60 hover:text-[#ffc451] transition-colors">
+              Anasayfa
+            </a>
             <span className="text-white/40">›</span>
             <span className="text-[#ffc451] font-medium">Dergiler</span>
           </nav>
@@ -235,8 +251,18 @@ export default function DergilerPage() {
               className="w-full rounded-xl border border-[#333] bg-[#141414] px-10 py-3 text-sm outline-none transition-colors focus:border-[#ffc451] focus:ring-2 focus:ring-[#ffc451]/20"
               aria-label="Dergi ara"
             />
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" />
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-white/50"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z"
+              />
             </svg>
           </label>
 
@@ -249,7 +275,7 @@ export default function DergilerPage() {
               <span className="text-sm text-white/60">Sırala:</span>
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
+                onChange={(e) => setSort(e.target.value)}
                 className="rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm outline-none focus:border-[#ffc451] focus:ring-2 focus:ring-[#ffc451]/20 cursor-pointer"
                 aria-label="Sıralama seç"
               >
@@ -303,7 +329,7 @@ export default function DergilerPage() {
                 <span>Sayfa</span>
                 <strong className="text-white">{page}</strong>
                 <span>/</span>
-                <span>{Math.max(1, Math.ceil(total / limit))}</span>
+                <span>{totalPages}</span>
                 <div className="h-4 w-px bg-[#333] mx-3" />
                 <span>Gösterim:</span>
                 <select
@@ -332,8 +358,8 @@ export default function DergilerPage() {
                   Geri
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(Math.max(1, Math.ceil(total / limit)), p + 1))}
-                  disabled={page >= Math.max(1, Math.ceil(total / limit))}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
                   className="flex items-center gap-2 rounded-xl border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white/80 disabled:opacity-40 hover:border-[#ffc451] hover:text-white"
                 >
                   İleri

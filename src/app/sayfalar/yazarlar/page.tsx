@@ -2,6 +2,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BookOpen, Calendar, FileText, User, ChevronLeft, ChevronRight } from "lucide-react";
 
+
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000/api").replace(/\/+$/, "");
+const apiUrl = (path: string) => `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+const ASSET_BASE = (process.env.NEXT_PUBLIC_ASSET_BASE || "").replace(/\/+$/, "");
+
+
 /** --- API tipleri --- */
 type YazarDTO = {
   id: number;
@@ -58,10 +64,15 @@ const PLACEHOLDER = "/yazarlar/placeholder-author.png";
 function normalizeImage(src: string | null | undefined): { src: string; isPlaceholder: boolean } {
   if (!src) return { src: PLACEHOLDER, isPlaceholder: true };
   if (/^https?:\/\//i.test(src)) return { src, isPlaceholder: false };
-  let clean = src.trim().replace(/^\/+/, "");
-  if (!clean.startsWith("yazarlar/")) clean = `yazarlar/${clean}`;
-  return { src: `/${clean}`, isPlaceholder: false };
+
+  const clean = src.trim().replace(/^\/+/, ""); // "yazarlar/xxx.jpg"
+
+  // clean zaten "yazarlar/..." ise direkt kullan
+  const base = (ASSET_BASE || API_BASE.replace(/\/api$/, "")).replace(/\/+$/, "");
+
+  return { src: `${base}/${clean}`, isPlaceholder: false };
 }
+
 
 /** --- Kart --- */
 function AuthorCard({
@@ -76,9 +87,8 @@ function AuthorCard({
       <div className="relative aspect-[3/4] overflow-hidden bg-[#141414]">
         {/* Sadece placeholder ise ekstra padding veriyoruz (görsel alan içinde biraz küçülür) */}
         <div
-          className={`absolute inset-0 flex items-center justify-center ${
-            a.isPlaceholder ? "p-8 sm:p-10 lg:p-12" : ""
-          }`}
+          className={`absolute inset-0 flex items-center justify-center ${a.isPlaceholder ? "p-8 sm:p-10 lg:p-12" : ""
+            }`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -143,7 +153,7 @@ export default function YazarlarPage() {
         params.set("page", String(page));
         params.set("limit", String(limit));
         if (qDebounced.trim()) params.set("search", qDebounced.trim());
-        const res = await fetch(`/api/yazars?${params.toString()}`, { cache: "no-store" });
+        const res = await fetch(apiUrl(`/yazars?${params.toString()}`), { cache: "no-store" });
         if (!res.ok) throw new Error(`Sunucu hatası (${res.status})`);
         const json: ListResponse = await res.json();
         if (cancelled) return;
